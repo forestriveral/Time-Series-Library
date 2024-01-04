@@ -1,5 +1,5 @@
 import os
-
+import sys
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
@@ -116,3 +116,18 @@ def adjustment(gt, pred):
 
 def cal_accuracy(y_pred, y_true):
     return np.mean(y_pred == y_true)
+
+
+class logger(object):
+    def __init__(self, filename="log.txt"):
+        self.terminal = sys.stdout
+        # with open(filename, 'r+') as file: file.truncate(0)
+        self.log = open(filename, "a")
+
+    def write(self, message):
+        self.log.write(message)
+        self.terminal.write(message)
+        self.log.flush()
+
+    def flush(self):
+        pass

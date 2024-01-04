@@ -11,7 +11,7 @@ import random
 import numpy as np
 
 if __name__ == '__main__':
-    fix_seed = 2021
+    fix_seed = 2024
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--channel_independence', type=int, default=0,
                         help='1: channel dependence 0: channel independence for FreTS model')
     # optimization
-    parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
+    parser.add_argument('--num_workers', type=int, default=4, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')
     parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
@@ -109,16 +109,23 @@ if __name__ == '__main__':
     print('Args in experiment:')
     print_args(args)
 
+    task_short_names = {'LTF': 'long_term_forecast',
+                        'STF': 'short_term_forecast',
+                        'IMP': 'imputation',
+                        'AD': 'anomaly_detection',
+                        'CLS': 'classification'}
+
+    args.task_name = task_short_names.get(args.task_name.upper(), None) or args.task_name
     if args.task_name == 'long_term_forecast':
-        Exp = Exp_Long_Term_Forecast
+        Exp = Exp_Long_Term_Forecast; args.short_task_name = 'LTF'
     elif args.task_name == 'short_term_forecast':
-        Exp = Exp_Short_Term_Forecast
+        Exp = Exp_Short_Term_Forecast; args.short_task_name = 'STF'
     elif args.task_name == 'imputation':
-        Exp = Exp_Imputation
+        Exp = Exp_Imputation; args.short_task_name = 'IMP'
     elif args.task_name == 'anomaly_detection':
-        Exp = Exp_Anomaly_Detection
+        Exp = Exp_Anomaly_Detection; args.short_task_name = 'AD'
     elif args.task_name == 'classification':
-        Exp = Exp_Classification
+        Exp = Exp_Classification; args.short_task_name = 'CLS'
     else:
         Exp = Exp_Long_Term_Forecast
 
@@ -127,7 +134,7 @@ if __name__ == '__main__':
             # setting record of experiments
             exp = Exp(args)  # set experiments
             setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
-                args.task_name,
+                args.short_task_name,
                 args.model_id,
                 args.model,
                 args.data,
@@ -145,16 +152,18 @@ if __name__ == '__main__':
                 args.distil,
                 args.des, ii)
 
+            # exp.logger(setting) # set training logger for recording
             print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
 
             print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
             exp.test(setting)
             torch.cuda.empty_cache()
+            print('>>>>>>> training finish <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
     else:
         ii = 0
         setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
-            args.task_name,
+            args.short_task_name,
             args.model_id,
             args.model,
             args.data,

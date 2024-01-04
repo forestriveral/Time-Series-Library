@@ -1,11 +1,12 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from utils.tools import EarlyStopping, adjust_learning_rate, visual
+from utils.tools import EarlyStopping, adjust_learning_rate, visual, logger
 from utils.metrics import metric
 import torch
 import torch.nn as nn
 from torch import optim
 import os
+import sys
 import time
 import warnings
 import numpy as np
@@ -35,6 +36,13 @@ class Exp_Long_Term_Forecast(Exp_Basic):
     def _select_criterion(self):
         criterion = nn.MSELoss()
         return criterion
+
+    def logger(self, setting):
+        log_path = os.path.join(self.args.checkpoints, setting)
+        if not os.path.exists(log_path):
+            os.makedirs(log_path)
+        log_file_path = log_path + f'/{self.args.model_id}_training_history.txt'
+        sys.stdout = logger(log_file_path)
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
@@ -86,6 +94,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             os.makedirs(path)
 
         time_now = time.time()
+        train_start_time = time.time()
 
         train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
@@ -156,7 +165,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     loss.backward()
                     model_optim.step()
 
-            print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
+            epoch_cost_time = time.strftime("%H:%M:%S", time.gmtime(time.time() - epoch_time))
+            print("Epoch: {} cost time: {}".format(epoch + 1, epoch_cost_time))
             train_loss = np.average(train_loss)
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
@@ -173,6 +183,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
+        training_time = time.strftime("%H:%M:%S", time.gmtime(time.time() - train_start_time))
+        print("Training cost time: {}".format(training_time))
+
         return self.model
 
     def test(self, setting, test=0):
@@ -183,9 +196,11 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         preds = []
         trues = []
-        folder_path = './test_results/' + setting + '/'
+        folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
+
+        test_start_time = time.time()
 
         self.model.eval()
         with torch.no_grad():
@@ -222,7 +237,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     shape = outputs.shape
                     outputs = test_data.inverse_transform(outputs.squeeze(0)).reshape(shape)
                     batch_y = test_data.inverse_transform(batch_y.squeeze(0)).reshape(shape)
-        
+
                 outputs = outputs[:, :, f_dim:]
                 batch_y = batch_y[:, :, f_dim:]
 
@@ -238,7 +253,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                    # visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         preds = np.array(preds)
         trues = np.array(trues)
@@ -251,6 +266,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
+
+        test_time = time.strftime("%H:%M:%S", time.gmtime(time.time() - test_start_time))
+        print("Testing cost time: {}".format(test_time))
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
         print('mse:{}, mae:{}'.format(mse, mae))
