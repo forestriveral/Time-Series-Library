@@ -203,6 +203,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         test_start_time = time.time()
 
         self.model.eval()
+        print('Testing model')
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 batch_x = batch_x.float().to(self.device)
@@ -247,20 +248,20 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 preds.append(pred)
                 trues.append(true)
                 if i % 20 == 0:
-                    input = batch_x.detach().cpu().numpy()
+                    inputs = batch_x.detach().cpu().numpy()
                     if test_data.scale and self.args.inverse:
-                        shape = input.shape
-                        input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+                        shape = inputs.shape
+                        inputs = test_data.inverse_transform(inputs.squeeze(0)).reshape(shape)
+                    gt = np.concatenate((inputs[0, :, -1], true[0, :, -1]), axis=0)
+                    pd = np.concatenate((inputs[0, :, -1], pred[0, :, -1]), axis=0)
                     # visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         preds = np.array(preds)
         trues = np.array(trues)
-        print('test shape:', preds.shape, trues.shape)
+        # print('test shape:', preds.shape, trues.shape)
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
-        print('test shape:', preds.shape, trues.shape)
+        print('\ttest shape:', preds.shape, trues.shape)
 
         # result save
         folder_path = './results/' + setting + '/'
@@ -268,16 +269,16 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             os.makedirs(folder_path)
 
         test_time = time.strftime("%H:%M:%S", time.gmtime(time.time() - test_start_time))
-        print("Testing cost time: {}".format(test_time))
+        print("\tTesting cost time: {}".format(test_time))
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
-        print('mse:{}, mae:{}'.format(mse, mae))
-        f = open("result_long_term_forecast.txt", 'a')
-        f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}'.format(mse, mae))
-        f.write('\n')
-        f.write('\n')
-        f.close()
+        print('\tmse:{:.2f}, mae:{:.2f}'.format(mse, mae))
+        # f = open("result_long_term_forecast.txt", 'a')
+        # f.write(setting + "  \n")
+        # f.write('mse:{}, mae:{}'.format(mse, mae))
+        # f.write('\n')
+        # f.write('\n')
+        # f.close()
 
         np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path + 'pred.npy', preds)

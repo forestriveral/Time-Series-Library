@@ -1,3 +1,6 @@
 LTF_test_Informer_turbine_ftS_sl96_ll48_pl16_dm512_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_test_0  
 mse:0.35680559277534485, mae:0.4223705232143402
 
+LTF_test_Informer_turbine_ftS_sl96_ll48_pl16_dm512_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_test_0  
+mse:66.86661529541016, mae:5.785305023193359
+
