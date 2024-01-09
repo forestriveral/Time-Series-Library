@@ -50,6 +50,12 @@ class Exp_Basic(object):
     def _get_data(self):
         pass
 
+    def logger(self):
+        pass
+
+    def recorder(self):
+        pass
+
     def vali(self):
         pass
 
@@ -57,4 +63,7 @@ class Exp_Basic(object):
         pass
 
     def test(self):
+        pass
+
+    def eval(self):
         pass

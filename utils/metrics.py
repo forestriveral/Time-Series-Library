@@ -71,8 +71,8 @@ def Q_R(pred, true, C):
 
 # When the prediction accuracy is less than 85%, the power prediction accuracy is calculated according to the following formula:
 def Acc_day_ahead(pred, true, Cap):
-    return 1 - np.sqrt(np.sum((true - pred)**2 * (np.abs(true - pred) / np.sum(np.abs(true - pred))))) / Cap
+    return (1 - np.sqrt(np.sum((true - pred)**2 * (np.abs(true - pred) / np.sum(np.abs(true - pred))))) / Cap) * 100.
 
 
 def Acc_hour_ahead_power(pred, true, Cap, P_N):
-    return (0.85 - Acc_day_ahead(pred, true, Cap)) * P_N * 0.6
+    return (85. - Acc_day_ahead(pred, true, Cap)) * P_N * 0.6

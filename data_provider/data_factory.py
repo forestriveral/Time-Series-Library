@@ -82,7 +82,10 @@ def data_provider(args, flag):
             target=args.target,
             timeenc=timeenc,
             freq=freq,
-            seasonal_patterns=args.seasonal_patterns
+            seasonal_patterns=args.seasonal_patterns,
+            test_idx=args.test_idx,
+            filters=args.use_filter,
+            hybrid=args.use_hybrid,
         )
         print(flag, len(data_set))
         data_loader = DataLoader(

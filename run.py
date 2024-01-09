@@ -7,6 +7,7 @@ from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
 from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification import Exp_Classification
 from utils.print_args import print_args
+from utils.tools import ModelConfig
 import random
 import numpy as np
 
@@ -128,6 +129,10 @@ if __name__ == '__main__':
         Exp = Exp_Classification; args.short_task_name = 'CLS'
     else:
         Exp = Exp_Long_Term_Forecast
+
+    # Convert to dictionary and add model config
+    # model_config = ModelConfig(vars(args))
+    # model_config.to_yaml('configs/model_config.yaml')
 
     if args.is_training:
         for ii in range(args.itr):

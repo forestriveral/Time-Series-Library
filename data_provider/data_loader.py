@@ -7,6 +7,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
+from utils.tools import data_filter, DotDict
+from utils.divider import dataset_divider, dataset_reader, split_calculator, dataset_indexer
 from data_provider.m4 import M4Dataset, M4Meta
 from data_provider.uea import subsample, interpolate_missing, Normalizer
 from sktime.datasets import load_from_tsfile_to_dataframe
@@ -292,8 +294,8 @@ class Dataset_Custom(Dataset):
 
 
 class Dataset_Turbine(Dataset):
-    def __init__(self, root_path, flag='train', size=None,
-                 features='S', data_path='ETTh1.csv',
+    def __init__(self, root_path, flag='train', size=None, test_idx=0,
+                 features='S', data_path='ETTh1.csv', filters=None, hybrid=None,
                  target='OT', scale=True, timeenc=0, freq='h', seasonal_patterns=None):
         # size [seq_len, label_len, pred_len]
         # info
@@ -315,6 +317,14 @@ class Dataset_Turbine(Dataset):
         self.scale = scale
         self.timeenc = timeenc
         self.freq = freq
+        self.test_idx = test_idx
+        self.split_num = None
+        self.time_stamp = None
+        self.test_stamp = []
+        self.filters = DotDict(filters)
+        self.high_frq_data = None
+        self.hybrid = DotDict(hybrid)
+        self.hybrid_data = None
 
         self.root_path = root_path
         self.data_path = data_path
@@ -332,13 +342,22 @@ class Dataset_Turbine(Dataset):
         cols.remove(self.target)
         cols.remove('date')
         df_raw = df_raw[['date'] + cols + [self.target]]
-        num_train = int(len(df_raw) * 0.7)
-        num_test = int(len(df_raw) * 0.2)
-        num_vali = len(df_raw) - num_train - num_test
-        border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
-        border2s = [num_train, num_train + num_vali, len(df_raw)]
+
+        if self.test_idx == 0:
+            num_train = int(len(df_raw) * 0.7)
+            num_test = int(len(df_raw) * 0.2)
+            num_vali = len(df_raw) - num_train - num_test
+            border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
+            border2s = [num_train, num_train + num_vali, len(df_raw)]
+        else:
+            if not isinstance(self.test_idx, int):
+                raise ValueError('Index of test dataset should be int')
+            border1s, border2s = dataset_divider(len(df_raw), self.test_idx)
+            self.split_num = split_calculator(border1s, border2s)[self.set_type]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
+        if (self.set_type < 1) and (self.split_num is not None):
+            print('(splited to ', tuple(self.split_num), ')')
 
         if self.features == 'M' or self.features == 'MS':
             cols_data = df_raw.columns[1:]
@@ -346,14 +365,28 @@ class Dataset_Turbine(Dataset):
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
 
+        if self.filters.flag and self.filters.type == 0:
+            self.high_frq_data = {}
+            for col in df_data.columns:
+                lowpass, highpass = data_filter(
+                    df_data[col].values,
+                    self.filters.order,
+                    self.filters.cutoff)
+                df_data[col] = lowpass
+                self.high_frq_data[col] = highpass
+
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            # train_data = df_data[border1s[0]:border2s[0]]
+            train_data = dataset_reader(df_data, border1s[0], border2s[0])
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
+        # df_stamp = df_raw[['date']][border1:border2]
+        df_stamp = dataset_reader(df_raw[['date']], border1, border2)
+        if self.set_type == 2:
+            self.time_stamp = df_stamp[['date']].copy(deep=True).values
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
             df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
@@ -365,25 +398,34 @@ class Dataset_Turbine(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
-        self.data_x = data[border1:border2]
-        self.data_y = data[border1:border2]
+        self.data_x = dataset_reader(data, border1, border2)
+        self.data_y = dataset_reader(data, border1, border2)
         self.data_stamp = data_stamp
 
     def __getitem__(self, index):
-        s_begin = index
+        # s_begin = index
+        s_begin = dataset_indexer(index, self.split_num, self.seq_len + self.pred_len)
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
 
-        seq_x = self.data_x[s_begin:s_end]
-        seq_y = self.data_y[r_begin:r_end]
+        if self.filters.flag and self.filters.type == 1:
+            self.high_frq_data = []
+            seq_x, seq_x_high_frq = data_filter(self.data_x[s_begin:s_end], self.filters.order, self.filters.cutoff)
+            seq_y, _ = data_filter(self.data_y[r_begin:r_end], self.filters.order, self.filters.cutoff)
+            self.high_frq_data.append(seq_x_high_frq)
+        else:
+            seq_x = self.data_x[s_begin:s_end]
+            seq_y = self.data_y[r_begin:r_end]
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
+        if (self.set_type == 2) and (self.time_stamp is not None):
+            self.test_stamp.append(self.time_stamp[r_begin + self.label_len:r_end])
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
-        return len(self.data_x) - self.seq_len - self.pred_len + 1
+        return (np.array(self.split_num) - self.seq_len - self.pred_len + 1).sum(dtype=int)
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)

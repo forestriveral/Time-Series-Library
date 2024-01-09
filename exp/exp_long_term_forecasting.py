@@ -1,6 +1,8 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from utils.tools import EarlyStopping, adjust_learning_rate, visual, logger
+from utils.tools import EarlyStopping, adjust_learning_rate, visual, \
+    logger, config_format, train_loss_plot
+from utils.evaluation import slide_pred_plot, slide_pred_accuracy
 from utils.metrics import metric
 import torch
 import torch.nn as nn
@@ -8,6 +10,7 @@ from torch import optim
 import os
 import sys
 import time
+import json
 import warnings
 import numpy as np
 
@@ -43,6 +46,27 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             os.makedirs(log_path)
         log_file_path = log_path + f'/{self.args.model_id}_training_history.txt'
         sys.stdout = logger(log_file_path)
+
+    def recorder(self, setting, action='add', value=None):
+        if action == 'init':
+            self.train_recorder = {'train_loss': [], 'val_loss': [], 'test_loss': []}
+        elif action == 'add':
+            assert value is not None, 'Please input the value to be recorded'
+            self.train_recorder['train_loss'].append(np.float(value[0]))
+            self.train_recorder['val_loss'].append(np.float(value[1]))
+            self.train_recorder['test_loss'].append(np.float(value[2]))
+        elif action == 'save':
+            assert hasattr(self, 'train_recorder'), \
+                'Please initialize the recorder first by action="init"'
+            record_path = os.path.join('./results/', setting)
+            if not os.path.exists(record_path):
+                os.makedirs(record_path)
+            record_json = json.dumps(self.train_recorder, indent=4)
+            with open(record_path + '/training_recorder.json', 'w+') as json_file:
+                json_file.write(record_json)
+            train_loss_plot(self.train_recorder, record_path)
+        else:
+            raise ValueError('Please input the correct action')
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
@@ -95,6 +119,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         time_now = time.time()
         train_start_time = time.time()
+        self.recorder(setting, 'init')
 
         train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
@@ -170,6 +195,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             train_loss = np.average(train_loss)
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
+            self.recorder(setting, value=[train_loss, vali_loss, test_loss])
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -182,6 +208,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
+        self.recorder(setting, 'save')
 
         training_time = time.strftime("%H:%M:%S", time.gmtime(time.time() - train_start_time))
         print("Training cost time: {}".format(training_time))
@@ -199,6 +226,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
+
+        # save the config file to results folder
+        config_format(self.args, folder_path)
 
         test_start_time = time.time()
 
@@ -252,8 +282,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     if test_data.scale and self.args.inverse:
                         shape = inputs.shape
                         inputs = test_data.inverse_transform(inputs.squeeze(0)).reshape(shape)
-                    gt = np.concatenate((inputs[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((inputs[0, :, -1], pred[0, :, -1]), axis=0)
+                    # gt = np.concatenate((inputs[0, :, -1], true[0, :, -1]), axis=0)
+                    # pd = np.concatenate((inputs[0, :, -1], pred[0, :, -1]), axis=0)
                     # visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         preds = np.array(preds)
@@ -262,6 +292,9 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
         print('\ttest shape:', preds.shape, trues.shape)
+
+        timestamps = np.array(test_data.test_stamp)
+        print('\ttime range: [', timestamps.min(), '==>', timestamps.max(), ']')
 
         # result save
         folder_path = './results/' + setting + '/'
@@ -280,8 +313,24 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         # f.write('\n')
         # f.close()
 
+        # combine the test result into one file
+        test_result = np.zeros((3, preds.shape[0], preds.shape[1], preds.shape[2]))
+        test_result[0, :, :, :] = preds
+        test_result[1, :, :, :] = trues
+        test_result[2, :, :, :] = timestamps
+
         np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
-        np.save(folder_path + 'pred.npy', preds)
-        np.save(folder_path + 'true.npy', trues)
+        # np.save(folder_path + 'pred.npy', preds)
+        # np.save(folder_path + 'true.npy', trues)
+        # np.save(folder_path + 'time.npy', timestamps)
+        np.save(folder_path + 'test.npy', test_result)
 
         return
+
+    def eval(self, setting):
+        folder_path = './results/' + setting + '/'
+        if not os.path.exists(folder_path):
+            raise ValueError('No such a folder: {}'.format(folder_path))
+
+        slide_pred_plot(setting, save=folder_path)
+        slide_pred_accuracy(setting, save=folder_path)
