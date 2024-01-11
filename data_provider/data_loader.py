@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
-from utils.tools import data_filter, DotDict
+from utils.tools import DotDict, data_filter, df_data_filter, hybrid_data_check
 from utils.divider import dataset_divider, dataset_reader, split_calculator, dataset_indexer
 from data_provider.m4 import M4Dataset, M4Meta
 from data_provider.uea import subsample, interpolate_missing, Normalizer
@@ -294,7 +294,7 @@ class Dataset_Custom(Dataset):
 
 
 class Dataset_Turbine(Dataset):
-    def __init__(self, root_path, flag='train', size=None, test_idx=0,
+    def __init__(self, root_path, flag='train', size=None, test_idx=0, cols=None,
                  features='S', data_path='ETTh1.csv', filters=None, hybrid=None,
                  target='OT', scale=True, timeenc=0, freq='h', seasonal_patterns=None):
         # size [seq_len, label_len, pred_len]
@@ -314,6 +314,7 @@ class Dataset_Turbine(Dataset):
 
         self.features = features
         self.target = target
+        self.cols = cols
         self.scale = scale
         self.timeenc = timeenc
         self.freq = freq
@@ -322,7 +323,7 @@ class Dataset_Turbine(Dataset):
         self.time_stamp = None
         self.test_stamp = []
         self.filters = DotDict(filters)
-        self.high_frq_data = None
+        self.highpass_data = None
         self.hybrid = DotDict(hybrid)
         self.hybrid_data = None
 
@@ -338,10 +339,30 @@ class Dataset_Turbine(Dataset):
         '''
         df_raw.columns: ['date', ...(other features), target feature]
         '''
+
         cols = list(df_raw.columns)
+        if self.cols:
+            if isinstance(self.cols, str):
+                self.cols = [self.cols]
+            assert isinstance(self.cols, list)
+            cols = self.cols.copy()
         cols.remove(self.target)
         cols.remove('date')
         df_raw = df_raw[['date'] + cols + [self.target]]
+        if self.hybrid.flag:
+            df_hybrid = pd.read_csv(
+                os.path.join(self.hybrid.root_path, self.hybrid.data_path))
+            hybrid_data_check(df_raw, df_hybrid)
+            if isinstance(self.hybrid.target, str):
+                self.hybrid.target = [self.hybrid.target]
+            hybrid_cols = [f'{t}_hybrid' for t in self.hybrid.target]
+            df_hybrid.rename(columns=dict(zip(self.hybrid.target, hybrid_cols)), inplace=True)
+            assert isinstance(self.hybrid.target, list), \
+                'Hybrid target should be list'
+            assert len([self.target]) == len(self.hybrid.target), \
+                'Hybrid dataset should have the same number of features with raw dataset'
+            df_hybrid = df_hybrid[hybrid_cols]
+            df_raw = df_raw[['date'] + cols +  [self.target]]
 
         if self.test_idx == 0:
             num_train = int(len(df_raw) * 0.7)
@@ -357,7 +378,7 @@ class Dataset_Turbine(Dataset):
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         if (self.set_type < 1) and (self.split_num is not None):
-            print('(splited to ', tuple(self.split_num), ')')
+            print('[training splited ', tuple(self.split_num), ']')
 
         if self.features == 'M' or self.features == 'MS':
             cols_data = df_raw.columns[1:]
@@ -366,22 +387,22 @@ class Dataset_Turbine(Dataset):
             df_data = df_raw[[self.target]]
 
         if self.filters.flag and self.filters.type == 0:
-            self.high_frq_data = {}
-            for col in df_data.columns:
-                lowpass, highpass = data_filter(
-                    df_data[col].values,
-                    self.filters.order,
-                    self.filters.cutoff)
-                df_data[col] = lowpass
-                self.high_frq_data[col] = highpass
+            self.highpass_data = {}
+            df_data, highpass1 = df_data_filter(df_data, self.filters.order, self.filters.cutoff)
+            df_hybrid, highpass2 = df_data_filter(df_hybrid, self.filters.order, self.filters.cutoff)
+            self.highpass_data.update(**highpass1, **highpass2)
 
         if self.scale:
             # train_data = df_data[border1s[0]:border2s[0]]
             train_data = dataset_reader(df_data, border1s[0], border2s[0])
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
+            if self.hybrid.flag:
+                hybrid = self.scaler.transform(df_hybrid.values)
         else:
             data = df_data.values
+            if self.hybrid.flag:
+                hybrid = df_hybrid.values
 
         # df_stamp = df_raw[['date']][border1:border2]
         df_stamp = dataset_reader(df_raw[['date']], border1, border2)
@@ -398,6 +419,8 @@ class Dataset_Turbine(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
+        if self.hybrid.flag:
+            self.hybrid_data = dataset_reader(hybrid, border1, border2)
         self.data_x = dataset_reader(data, border1, border2)
         self.data_y = dataset_reader(data, border1, border2)
         self.data_stamp = data_stamp
@@ -409,16 +432,25 @@ class Dataset_Turbine(Dataset):
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
 
+        if self.hybrid.flag and self.hybrid_data is not None:
+            # self.hybrid_data = self.data_y
+            data_y_hybrid = np.concatenate(
+                [self.hybrid_data[s_end:r_end], self.data_y[s_end:r_end]], axis=0)
+        else:
+            data_y_hybrid = self.data_y[r_begin:r_end]
+
         if self.filters.flag and self.filters.type == 1:
-            self.high_frq_data = []
+            self.highpass_data = []
             seq_x, seq_x_high_frq = data_filter(self.data_x[s_begin:s_end], self.filters.order, self.filters.cutoff)
-            seq_y, _ = data_filter(self.data_y[r_begin:r_end], self.filters.order, self.filters.cutoff)
-            self.high_frq_data.append(seq_x_high_frq)
+            seq_y, _ = data_filter(data_y_hybrid, self.filters.order, self.filters.cutoff)
+            self.highpass_data.append(seq_x_high_frq)
         else:
             seq_x = self.data_x[s_begin:s_end]
-            seq_y = self.data_y[r_begin:r_end]
+            seq_y = data_y_hybrid
+
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
+
         if (self.set_type == 2) and (self.time_stamp is not None):
             self.test_stamp.append(self.time_stamp[r_begin + self.label_len:r_end])
 

@@ -9,6 +9,7 @@ import yaml
 import copy
 from pathlib import Path
 from scipy import signal
+from scipy import interpolate
 
 from typing import Any, List, Dict, Callable, Literal, Optional
 
@@ -209,6 +210,16 @@ def data_filter(sample, n=5, cut_off=0.15):
     return signal.filtfilt(b1, a1, sample), signal.filtfilt(b2, a2, sample)
 
 
+def df_data_filter(df_data, n, cut_off):
+    highpass_data = {}
+    for col in df_data.columns:
+        lowpass, highpass = data_filter(
+            df_data[col].values, n, cut_off)
+        df_data[col] = lowpass
+        highpass_data[col] = highpass
+    return df_data, highpass_data
+
+
 def noise_statistics(noise):
     if isinstance(noise, torch.Tensor):
         noise = noise.cpu().numpy()
@@ -240,9 +251,74 @@ def train_loss_plot(train_recorder, record_path):
     ax.plot(np.arange(len(train_recorder['train_loss'])),
             train_recorder['test_loss'], 'g-', label='test loss', lw=2.)
     plt.legend(loc='best')
-    plt.savefig(os.path.join(record_path, '/training_history.png'))
+    plt.savefig(record_path + '/training_history.png')
     plt.close()
 
 
-def hybrid_data_check():
-    pass
+def turbine_curve_loader(wt, param):
+    wts = ['320', '265']; params = ['power', 'thrust', 'C_p', 'C_t']
+    power_curve = pd.read_csv('datasets/WFP/Turbine_Power_Curve.csv', index_col=None, header=0)
+    # print(power_curve.shape)
+    # print(power_curve)
+
+    if isinstance(wt, int):
+        wt = str(wt)
+
+    assert wt in wts, 'Invalid turbine type'
+    assert param in params, 'Invalid parameter'
+
+    col_name = '_'.join([param, wt])
+    interp_func = interpolate.interp1d(
+        power_curve['speed'].values,
+        power_curve[col_name].values * 1e-3,
+        kind='slinear',
+        fill_value='extrapolate')
+
+    print(f'Turbine {wt} {param} curve loading ...')
+
+    return interp_func
+
+#  Check whether the shape and datetime columns of raw and hybrid data are matched
+def hybrid_data_check(raw, hybrid):
+    if not (raw.shape[0] == hybrid.shape[0]):
+        raise ValueError('Shape of raw and hybrid data not matched')
+    if not (pd.to_datetime(raw['date']).equals(pd.to_datetime(hybrid['date']))):
+        raise ValueError('Datetime of raw and hybrid data not matched')
+    return True
+
+
+def speed_power_converter(args, debug=False):
+    DEFAULT_POWER_BASELINE = 'datasets\WFP\Turbine_Patv_Spd_15min_filled.csv'
+    DEFAULT_POWER_INDEX = ['320'] * 10 + ['265'] * 3
+
+    pred_type, pred_idx = args.target.split('_')
+
+    data_type = 'power'
+    pow_func = lambda x: x
+    baseline_data = None
+    pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
+
+    if (not debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
+        pow_func = turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power')
+
+        # load the baseline data and extract the power baseline
+        pow_baseline = pd.read_csv(DEFAULT_POWER_BASELINE, index_col=None, header=0)
+        pow_baseline = pow_baseline[['date', f'Patv_{pred_idx}']]
+
+        def baseline_data(date, data=pow_baseline):
+            assert isinstance(date, np.ndarray), 'Input date should be a numpy array'
+            # load the baseline data and extract the power baseline of the specific date range
+            data['date'] = pd.to_datetime(data['date'])
+            data = data.set_index('date')
+            data = data.loc[pd.to_datetime(date.flatten())]
+            data = data.reset_index()
+            print('Baseline data extracting ...')
+            return data.iloc[:, 1].values.reshape(date.shape)
+
+    elif (debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
+        pow_capacity = 20.
+        data_type = 'speed'
+    elif (pred_type == 'Patv') and (pred_idx == 'Total'):
+        pow_capacity = 39.95
+
+    return DotDict(flag=data_type, func=pow_func, baseline=baseline_data, capacity=pow_capacity)

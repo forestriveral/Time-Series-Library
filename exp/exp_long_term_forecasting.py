@@ -1,7 +1,7 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, \
-    logger, config_format, train_loss_plot
+    logger, config_format, train_loss_plot, speed_power_converter
 from utils.evaluation import slide_pred_plot, slide_pred_accuracy
 from utils.metrics import metric
 import torch
@@ -314,7 +314,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         # f.close()
 
         # combine the test result into one file
-        test_result = np.zeros((3, preds.shape[0], preds.shape[1], preds.shape[2]))
+        test_result = np.zeros((3, preds.shape[0], preds.shape[1], preds.shape[2])).astype(np.object)
         test_result[0, :, :, :] = preds
         test_result[1, :, :, :] = trues
         test_result[2, :, :, :] = timestamps
@@ -332,5 +332,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if not os.path.exists(folder_path):
             raise ValueError('No such a folder: {}'.format(folder_path))
 
-        slide_pred_plot(setting, save=folder_path)
-        slide_pred_accuracy(setting, save=folder_path)
+        # check the prediction target is speed or power
+        convert = speed_power_converter(self.args, debug=False)
+
+        slide_pred_plot(setting, convert=convert, save=folder_path)
+        slide_pred_accuracy(setting, convert=convert, save=folder_path)

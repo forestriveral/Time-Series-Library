@@ -6,47 +6,57 @@ from pathlib import Path
 import matplotlib.dates as mdates
 from matplotlib.ticker import MultipleLocator
 
-
 from utils.metrics import E_rmse, E_mae, E_me, r, C_R, Q_R, \
     Acc_day_ahead, Acc_hour_ahead_power
 
 
-default_path = 'results/'
+DEFAULT_PATH = 'results/'
 
-subplot_layouts = {2: (2, 1), 3:(3, 1), 4: (2, 2), 6: (2, 3),
+SUBPLOT_LAYOUTS = {2: (2, 1), 3:(3, 1), 4: (2, 2), 6: (2, 3),
                    9: (3, 3), 12: (3, 4), 16: (4, 4), 20: (4, 5),
                    24: (4, 6), 25: (5, 5), 36: (6, 6), 49: (7, 7),}
 
-level_points = np.array([0, 0.2, 0.5, 0.7, 1., np.inf])
 
 
 def pred_true_load(case):
-    if os.path.exists(os.path.join(default_path, f'{case}/test.npy')):
-        test_data = np.load(os.path.join(default_path, f'{case}/test.npy'), allow_pickle=True)
-        preds, trues, times = test_data[:, :, 0], test_data[:, :, 1], test_data[:, :, 2]
+    if os.path.exists(os.path.join(DEFAULT_PATH, f'{case}/test.npy')):
+        test_data = np.load(os.path.join(DEFAULT_PATH, f'{case}/test.npy'), allow_pickle=True)
+        preds, trues, times = test_data[0], test_data[1], test_data[2]
     else:
-        preds= np.load(os.path.join(default_path, f'{case}/pred.npy'))
-        trues = np.load(os.path.join(default_path, f'{case}/true.npy'))
+        preds= np.load(os.path.join(DEFAULT_PATH, f'{case}/pred.npy'))
+        trues = np.load(os.path.join(DEFAULT_PATH, f'{case}/true.npy'))
 
-        if os.path.exists(os.path.join(default_path, f'{case}/time.npy')):
-            times = np.load(os.path.join(default_path, f'{case}/time.npy'), allow_pickle=True)
+        if os.path.exists(os.path.join(DEFAULT_PATH, f'{case}/time.npy')):
+            times = np.load(os.path.join(DEFAULT_PATH, f'{case}/time.npy'), allow_pickle=True)
         else:
             times = None
 
     return preds, trues, times
 
 
-def slide_pred_plot(case, save=None):
+def slide_pred_plot(case, convert=None, save=None):
     preds, trues, times = pred_true_load(case)
     assert preds.shape == trues.shape
     if times is not None:
         assert preds.shape == times.shape
+
     slide_step = preds.shape[1]
     pred = preds[:, :, 0][::slide_step]
     true = trues[:, :, 0][::slide_step]
     time = times[:, :, 0][::slide_step]
 
-    capacity = 39.95
+    if convert is not None:
+        pred = convert.func(pred)
+        if convert.baseline is not None:
+            true = convert.baseline(time)
+
+    capacity = convert.capacity
+
+    if convert.flag == 'power':
+        ylabel = 'Power (MW)'
+    else:
+        ylabel = 'Wind Speed (m/s)'
+
     slide_num = 30
     subplot_num = 4
     if pred.shape[0] <= slide_num:
@@ -72,9 +82,9 @@ def slide_pred_plot(case, save=None):
                            sharey=True, dpi=100)
     for ii, axi in enumerate(ax.flatten()):
         start, end = slide_split[ii], slide_split[ii + 1]
-        time_stamp = time[start:end].flatten().astype(np.datetime64)
-        axi.plot(time_stamp, pred[start:end].flatten(), label='pred', lw=2.)
-        axi.plot(time_stamp, true[start:end].flatten(), label='true', lw=2.)
+        time_stamp = pd.to_datetime(time[start:end].flatten())
+        axi.plot(time_stamp, pred[start:end].flatten(), label='pred', lw=2.5)
+        axi.plot(time_stamp, true[start:end].flatten(), label='true', lw=2.5)
         time_end = np.datetime64(time_stamp.min()) + np.timedelta64(slide_num_subplot + 1, 'D')
         time_scope = pd.date_range(time_stamp.min(), time_end, freq='15T').values
         for split_line in np.arange(0, min(slide_num_subplot, end - start) + 1):
@@ -83,35 +93,43 @@ def slide_pred_plot(case, save=None):
         if ii == subplot_num - 1:
             axi.set_xlabel('Time', fontsize=15)
         for xtick in axi.get_xticklabels():
-            xtick.set_rotation(30); xtick.set_horizontalalignment('right')
+            # xtick.set_rotation(30)
+            # xtick.set_horizontalalignment('right')
+            xtick.set_horizontalalignment('center')
         axi.xaxis.set_major_locator(mdates.HourLocator(interval=12))
         axi.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d | %H:%M"))
-        axi.set_ylabel('Power (MW)', fontsize=15)
+        axi.set_ylabel(ylabel, fontsize=15)
         axi.set_ylim([0., 1.2 * capacity])
-        axi.tick_params(labelsize=13, colors='k', direction='in',
+        axi.tick_params(labelsize=15, colors='k', direction='in',
                         top=True, bottom=True, left=True, right=True)
         tick_labs = axi.get_xticklabels() + axi.get_yticklabels()
         [tick_lab.set_fontname('Times New Roman') for tick_lab in tick_labs]
         axi.legend(loc="best")
     fig.suptitle(f'Prediction Plot of {case}', fontsize=18, y=0.935)
     # plt.tight_layout()
-    plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.1, wspace=0.15, hspace=0.35)
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.1, wspace=0.15, hspace=0.25)
     if save:
         plt.savefig(save + f'/slide_pred_plot.png', format='png', dpi=200, bbox_inches='tight')
     plt.show()
 
 
-def slide_pred_accuracy(case, metric='C_R', acc=False, save=None):
+def slide_pred_accuracy(case, metric='C_R', acc=False, convert=None, save=None):
     preds, trues, times = pred_true_load(case)
     assert preds.shape == trues.shape
 
     slide_step = preds.shape[1]
     pred = preds[:, :, 0][::slide_step]
     true = trues[:, :, 0][::slide_step]
+    time = times[:, :, 0][::slide_step]
 
+    if convert is not None:
+        pred = convert.func(pred)
+        if convert.baseline is not None:
+            true = convert.baseline(time)
+
+    capacity = convert.capacity
     acc_max = 100.
     acc_require = 85.
-    capacity = 39.95
     slide_num = 30
     if pred.shape[0] <= slide_num:
         slide_num = pred.shape[0]

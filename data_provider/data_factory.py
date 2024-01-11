@@ -80,6 +80,7 @@ def data_provider(args, flag):
             size=[args.seq_len, args.label_len, args.pred_len],
             features=args.features,
             target=args.target,
+            cols=args.cols,
             timeenc=timeenc,
             freq=freq,
             seasonal_patterns=args.seasonal_patterns,

@@ -140,7 +140,8 @@ def batch_model_runner(configs: str | Path) -> None:
 
 
 if __name__ == '__main__':
-    config = 'configs/model_config.yaml'
+    # config = 'configs/power_config.yaml'
+    config = 'configs/speed_config.yaml'
 
     model_runner(config)
     # batch_model_runner(configs)
