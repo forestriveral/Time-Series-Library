@@ -12,17 +12,11 @@ root_path: ./datasets/WFP/
 data_path: Turbine_Patv_Spd_15min_filled.csv
 features: S
 target: Patv_Total
-cols: []
+subcol: []
 freq: t
 checkpoints: ./checkpoints/
 test_idx: 5
-
-# filter setting
-use_filter:
-  flag: false
-  type: 0
-  order: 5
-  cutoff: 0.15
+run_seed: 2024
 
 # hybrid training
 use_hybrid:
@@ -30,6 +24,13 @@ use_hybrid:
   root_path: ./datasets/CFD/
   data_path: wrf_converted_turbine_data.csv
   target: Patv_Total
+
+# filter setting
+use_filter:
+  flag: false
+  type: 0
+  order: 5
+  cutoff: 0.15
 
 # forecasting task
 seq_len: 384

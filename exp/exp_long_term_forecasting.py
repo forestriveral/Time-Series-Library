@@ -1,7 +1,8 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, \
-    logger, config_format, train_loss_plot, speed_power_converter
+    logger, config_format, train_loss_plot, speed_power_converter, \
+        hyper_report_generator
 from utils.evaluation import slide_pred_plot, slide_pred_accuracy
 from utils.metrics import metric
 import torch
@@ -327,7 +328,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         return
 
-    def eval(self, setting):
+    def eval(self, setting, report=False):
         folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             raise ValueError('No such a folder: {}'.format(folder_path))
@@ -335,14 +336,17 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         # check the prediction target is speed or power
         convert = speed_power_converter(self.args.target, debug=False)
 
-        slide_pred_plot(
+        _ = slide_pred_plot(
             setting,
             convert=convert,
             save=folder_path + 'slide_pred_plot.png',
             )
 
-        slide_pred_accuracy(
+        acc = slide_pred_accuracy(
             setting,
             convert=convert,
             save=folder_path + 'slide_pred_acc.png',
             )
+
+        if report:
+            hyper_report_generator(self.args, setting, acc=acc)

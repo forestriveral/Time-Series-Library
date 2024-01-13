@@ -3,15 +3,15 @@
 # basic config
 task_name: LTF
 is_training: 1
-model_id: Wspd6_cfd_wrf
+model_id: Patvs_cfd_wrf
 model: Informer
 
 # data loader
 data: turbine
 root_path: ./datasets/WFP/
 data_path: Turbine_Patv_Spd_15min_filled.csv
-features: S
-target: Wspd_6
+features: M
+target: [Patv_6, Patv_7]
 subcol: []
 freq: t
 checkpoints: ./checkpoints/
@@ -23,14 +23,14 @@ use_hybrid:
   flag: true
   root_path: ./datasets/CFD/
   data_path: wrf_converted_turbine_data.csv
-  target: Wspd_6
+  target: [Patv_6, Patv_7]
 
 # filter setting
 use_filter:
   flag: false
   type: 0
   order: 5
-  cutoff: 0.1
+  cutoff: 0.15
 
 # forecasting task
 seq_len: 384
@@ -53,13 +53,13 @@ dec_in: 1
 c_out: 1
 d_model: 512
 n_heads: 8
-e_layers: 3
-d_layers: 2
+e_layers: 2
+d_layers: 1
 d_ff: 2048
 moving_avg: 25
 factor: 1
 distil: true
-dropout: 0.2
+dropout: 0.1
 embed: timeF
 activation: gelu
 output_attention: false

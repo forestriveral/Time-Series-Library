@@ -294,7 +294,7 @@ class Dataset_Custom(Dataset):
 
 
 class Dataset_Turbine(Dataset):
-    def __init__(self, root_path, flag='train', size=None, test_idx=0, cols=None,
+    def __init__(self, root_path, flag='train', size=None, test_idx=0, subcol=None,
                  features='S', data_path='ETTh1.csv', filters=None, hybrid=None,
                  target='OT', scale=True, timeenc=0, freq='h', seasonal_patterns=None):
         # size [seq_len, label_len, pred_len]
@@ -314,7 +314,7 @@ class Dataset_Turbine(Dataset):
 
         self.features = features
         self.target = target
-        self.cols = cols
+        self.subcol = subcol
         self.scale = scale
         self.timeenc = timeenc
         self.freq = freq
@@ -341,30 +341,33 @@ class Dataset_Turbine(Dataset):
         '''
 
         cols = list(df_raw.columns)
-        if self.cols:
-            if isinstance(self.cols, str):
-                self.cols = [self.cols]
-            assert isinstance(self.cols, list)
-            cols = self.cols.copy()
-        if self.target not in cols:
+        if self.subcol is None:
+            self.subcol = []
+
+        # convert target type to list if str is given
+        if isinstance(self.target, str):
+            self.target = [self.target]
+        if not set(self.target).issubset(set(cols)):
             raise ValueError('Target should be in columns')
-        cols.remove(self.target)
+
+        # cols.remove(self.target)
+        cols = list(filter(lambda x: x not in self.target, cols))
         cols.remove('date')
-        df_raw = df_raw[['date'] + cols + [self.target]]
+        df_raw = df_raw[['date'] + cols + self.target]
+
         if self.hybrid.flag:
             df_hybrid = pd.read_csv(
                 os.path.join(self.hybrid.root_path, self.hybrid.data_path))
             hybrid_data_check(df_raw, df_hybrid)
+            assert isinstance(self.hybrid.target, (list, str)), \
+                'Hybrid target should be list or str'
             if isinstance(self.hybrid.target, str):
                 self.hybrid.target = [self.hybrid.target]
             hybrid_cols = [f'{t}_hybrid' for t in self.hybrid.target]
             df_hybrid.rename(columns=dict(zip(self.hybrid.target, hybrid_cols)), inplace=True)
-            assert isinstance(self.hybrid.target, list), \
-                'Hybrid target should be list'
-            assert len([self.target]) == len(self.hybrid.target), \
+            assert len(self.target) == len(self.hybrid.target), \
                 'Hybrid dataset should have the same number of features with raw dataset'
             df_hybrid = df_hybrid[hybrid_cols]
-            df_raw = df_raw[['date'] + cols +  [self.target]]
 
         if self.test_idx == 0:
             num_train = int(len(df_raw) * 0.7)
@@ -383,10 +386,11 @@ class Dataset_Turbine(Dataset):
             print('[training splited ', tuple(self.split_num), ']')
 
         if self.features == 'M' or self.features == 'MS':
-            cols_data = df_raw.columns[1:]
+            cols_num = len(self.target) + len(self.subcol)
+            cols_data = df_raw.columns[-cols_num:]
             df_data = df_raw[cols_data]
         elif self.features == 'S':
-            df_data = df_raw[[self.target]]
+            df_data = df_raw[self.target]
 
         if self.filters.flag and self.filters.type == 0:
             self.highpass_data = {}

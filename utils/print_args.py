@@ -1,23 +1,58 @@
 def print_args(args):
     print("\033[1m" + "Basic Config" + "\033[0m")
-    print(f'  {"Task Name:":<20}{args.task_name:<20}{"Is Training:":<20}{args.is_training:<20}')
-    print(f'  {"Model ID:":<20}{args.model_id:<20}{"Model:":<20}{args.model:<20}')
+    print(f'  {"Task Name:":<20}{args.task_name:<20}')
+    print(f'  {"Is Training:":<20}{args.is_training:<20}')
+    print(f'  {"Model ID:":<20}{args.model_id:<20}')
+    print(f'  {"Model:":<20}{args.model:<20}')
     print()
 
     print("\033[1m" + "Data Loader" + "\033[0m")
-    print(f'  {"Data:":<20}{args.data:<20}{"Root Path:":<20}{args.root_path:<20}')
-    print(f'  {"Data Path:":<20}{args.data_path:<20}{"Features:":<20}{args.features:<20}')
-    print(f'  {"Target:":<20}{args.target:<20}{"Freq:":<20}{args.freq:<20}')
+    print(f'  {"Data:":<20}{args.data:<20}')
+    print(f'  {"Root Path:":<20}{args.root_path:<20}')
+    print(f'  {"Data Path:":<20}{args.data_path:<20}')
+    print(f'  {"Features:":<20}{args.features:<20}')
+
+    print_target = ' '.join(args.target)
+    print(f'  {"Target:":<20}{print_target:<20}')
+
+    if args.subcol is not None:
+        print_subcol = ' '.join(args.subcol)
+    else:
+        print_subcol = '(None)'
+    print(f'  {"Cols:":<20}{print_subcol:<20}')
+
+    print(f'  {"Freq:":<20}{args.freq:<20}')
     print(f'  {"Checkpoints:":<20}{args.checkpoints:<20}')
     print(f'  {"Test Index:":<20}{args.test_idx:<20}')
-    print(f'  {"Use Filter:":<20}{args.use_filter.flag:<20}')
-    print(f'  {"Use Hybrid:":<20}{args.use_hybrid.flag:<20}')
     print()
+
+    if args.use_filter.flag:
+        print("\033[1m" + "Use Filter" + "\033[0m")
+        print(f'  {"Flag:":<20}{args.use_filter.flag:<20}')
+        print(f'  {"Type:":<20}{args.use_filter.type:<20}')
+        print(f'  {"Order:":<20}{args.use_filter.order:<20}')
+        print(f'  {"Cutoff:":<20}{args.use_filter.cutoff:<20}')
+        print()
+
+    if args.use_hybrid.flag:
+        print("\033[1m" + "Use Hybrid" + "\033[0m")
+        print(f'  {"Flag:":<20}{args.use_hybrid.flag:<20}')
+        print(f'  {"Root Path:":<20}{args.use_hybrid.root_path:<20}')
+        print(f'  {"Data Path:":<20}{args.use_hybrid.data_path:<20}')
+
+        if args.use_hybrid.target is not None:
+            print_hybrid_target = ' '.join(args.use_hybrid.target)
+        else:
+            print_hybrid_target = '(None)'
+        print(f'  {"Target:":<20}{print_hybrid_target:<20}')
+        print()
 
     if args.task_name in ['long_term_forecast', 'short_term_forecast']:
         print("\033[1m" + "Forecasting Task" + "\033[0m")
-        print(f'  {"Seq Len:":<20}{args.seq_len:<20}{"Label Len:":<20}{args.label_len:<20}')
-        print(f'  {"Pred Len:":<20}{args.pred_len:<20}{"Seasonal Patterns:":<20}{args.seasonal_patterns:<20}')
+        print(f'  {"Seq Len:":<20}{args.seq_len:<20}')
+        print(f'  {"Label Len:":<20}{args.label_len:<20}')
+        print(f'  {"Pred Len:":<20}{args.pred_len:<20}')
+        print(f'  {"Seasonal Patterns:":<20}{args.seasonal_patterns:<20}')
         print(f'  {"Inverse:":<20}{args.inverse:<20}')
         print()
 
@@ -41,6 +76,7 @@ def print_args(args):
     print(f'  {"Distil:":<20}{args.distil:<20}{"Dropout:":<20}{args.dropout:<20}')
     print(f'  {"Embed:":<20}{args.embed:<20}{"Activation:":<20}{args.activation:<20}')
     print(f'  {"Output Attention:":<20}{args.output_attention:<20}')
+    print(f'  {"Channel Independence:":<20}{args.channel_independence:<20}')
     print()
 
     print("\033[1m" + "Run Parameters" + "\033[0m")
@@ -49,6 +85,7 @@ def print_args(args):
     print(f'  {"Patience:":<20}{args.patience:<20}{"Learning Rate:":<20}{args.learning_rate:<20}')
     print(f'  {"Des:":<20}{args.des:<20}{"Loss:":<20}{args.loss:<20}')
     print(f'  {"Lradj:":<20}{args.lradj:<20}{"Use Amp:":<20}{args.use_amp:<20}')
+    print(f'  {"Is Logging:":<20}{args.is_logging:<20}')
     print()
 
     print("\033[1m" + "GPU" + "\033[0m")

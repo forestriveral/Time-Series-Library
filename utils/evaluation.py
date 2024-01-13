@@ -51,8 +51,9 @@ def slide_pred_plot(
         preds, trues, times = pred_true_load(case)
 
         slide_step = preds.shape[1]
-        pred = preds[:, :, 0][::slide_step]
-        true = trues[:, :, 0][::slide_step]
+        f_dim = preds.shape[2]
+        pred = preds[:, :, :f_dim][::slide_step]
+        true = trues[:, :, :f_dim][::slide_step]
         assert preds.shape == trues.shape
 
         if times is not None:
@@ -146,6 +147,7 @@ def slide_pred_plot(
         plt.show()
     plt.close()
 
+    return None
 
 def slide_pred_accuracy(
     case=None,
@@ -159,8 +161,9 @@ def slide_pred_accuracy(
         preds, trues, times = pred_true_load(case)
 
         slide_step = preds.shape[1]
-        pred = preds[:, :, 0][::slide_step]
-        true = trues[:, :, 0][::slide_step]
+        f_dim = preds.shape[2]
+        pred = preds[:, :, :f_dim][::slide_step]
+        true = trues[:, :, :f_dim][::slide_step]
         assert preds.shape == trues.shape
 
         if times is not None:
@@ -259,6 +262,8 @@ def slide_pred_accuracy(
     else:
         plt.show()
     plt.close()
+
+    return precisions.mean()
 
 
 def cfd_converted_data_eval(

@@ -1,15 +1,17 @@
 import os
 import sys
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
-import pandas as pd
 import math
 import yaml
 import copy
+import torch
+import itertools
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy import signal
 from scipy import interpolate
+from collections import OrderedDict
 
 from typing import Any, List, Dict, Callable, Literal, Optional
 
@@ -278,6 +280,7 @@ def turbine_curve_loader(wt, param):
 
     return interp_func
 
+
 #  Check whether the shape and datetime columns of raw and hybrid data are matched
 def hybrid_data_check(raw, hybrid):
     if not (raw.shape[0] == hybrid.shape[0]):
@@ -287,25 +290,73 @@ def hybrid_data_check(raw, hybrid):
     return True
 
 
+def param_list_converter(param_list):
+    assert isinstance(param_list, list), 'Input should be a list'
+    for i, param in enumerate(param_list):
+        assert isinstance(param, (str, list))
+        if len(param) == 0:
+            param_list[i] = None
+        elif isinstance(param, str) and len(param) > 0:
+            param_list[i] = [param]
+    return param_list
+
+
 def speed_power_converter(pred_target, debug=False):
     DEFAULT_POWER_BASELINE = 'datasets\WFP\Turbine_Patv_Spd_15min_filled.csv'
     DEFAULT_POWER_INDEX = ['320'] * 10 + ['265'] * 3
 
-    assert isinstance(pred_target, str), 'Input should be a string'
-    pred_type, pred_idx = pred_target.split('_')
+    pow_baseline = pd.read_csv(DEFAULT_POWER_BASELINE, index_col=None, header=0)
 
-    data_type = 'power'
-    pow_func = lambda x: x
-    baseline_data = None
-    pow_capacity = 39.95
+    if len(pred_target) == 1:
+        pred_type, pred_idx = pred_target[0].split('_')
 
-    if (not debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
-        pow_func = turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power')
-        pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
+        data_type = 'power'
+        pow_func = lambda x: x
+        baseline_data = None
+        pow_capacity = 39.95
 
-        # load the baseline data and extract the power baseline
-        pow_baseline = pd.read_csv(DEFAULT_POWER_BASELINE, index_col=None, header=0)
-        pow_baseline = pow_baseline[['date', f'Patv_{pred_idx}']]
+        if (not debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
+            pow_func = turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power')
+            pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
+            pow_baseline = pow_baseline[['date', f'Patv_{pred_idx}']]
+
+            def baseline_data(date, data=pow_baseline):
+                assert isinstance(date, np.ndarray), 'Input date should be a numpy array'
+                # load the baseline data and extract the power baseline of the specific date range
+                data['date'] = pd.to_datetime(data['date'])
+                data = data.set_index('date')
+                data = data.loc[pd.to_datetime(date.flatten())]
+                data = data.reset_index()
+                print('Baseline data extracting ...')
+                return data.iloc[:, 1].values.reshape(date.shape)
+
+        elif (debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
+            pow_capacity = 20.
+            data_type = 'speed'
+        elif (pred_type == 'Patv') and (pred_idx in [str(i) for i in range(1, 14)]):
+            pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
+        elif (pred_type == 'Patv') and (pred_idx == 'Total'):
+            pow_capacity = 39.95
+    else:
+        data_type = 'power'
+        if debug:
+            data_type = 'speed'
+
+        pow_funcs, pow_cols, pow_caps = [], [], []
+        for pred in pred_target:
+            pred_type, pred_idx = pred.split('_')
+            if (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
+                pow_funcs.append(turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power'))
+            else:
+                pow_funcs.append(lambda x: x)
+            pow_caps.append(float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.)
+            pow_cols.append(f'Patv_{pred_idx}')
+
+        pow_func = lambda x: np.sum(
+            [pow_funcs[i](x.transpose(2, 0, 1).reshape(len(pow_funcs), -1)[i]) for i in range(len(pow_funcs))],
+            axis=0).reshape(x.shape[0], x.shape[1])
+        pow_capacity = np.sum(pow_caps)
+        pow_baseline = pow_baseline[['date'] + pow_cols]
 
         def baseline_data(date, data=pow_baseline):
             assert isinstance(date, np.ndarray), 'Input date should be a numpy array'
@@ -315,14 +366,59 @@ def speed_power_converter(pred_target, debug=False):
             data = data.loc[pd.to_datetime(date.flatten())]
             data = data.reset_index()
             print('Baseline data extracting ...')
-            return data.iloc[:, 1].values.reshape(date.shape)
-
-    elif (debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
-        pow_capacity = 20.
-        data_type = 'speed'
-    elif (pred_type == 'Patv') and (pred_idx in [str(i) for i in range(1, 14)]):
-        pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
-    elif (pred_type == 'Patv') and (pred_idx == 'Total'):
-        pow_capacity = 39.95
+            return data.iloc[:, 1:].values.reshape(date.shape[0], date.shape[1], -1).sum(axis=2)
 
     return DotDict(flag=data_type, func=pow_func, baseline=baseline_data, capacity=pow_capacity)
+
+
+def finetune_config_generator(config_dict):
+    # Extracting hyperparameters that have multiple options
+    variable_hyperparams = {k: v for k, v in config_dict.items() if isinstance(v, list)}
+
+    # Creating combinations of hyperparameters
+    hyperparam_combinations = list(itertools.product(*variable_hyperparams.values()))
+
+    # Generating a list of dictionaries for each combination
+    config_list = []
+    for combination in hyperparam_combinations:
+        config = config_dict.copy()  # Start with the base configuration
+        for key, value in zip(variable_hyperparams.keys(), combination):
+            config[key] = value
+        config_list.append(config)
+
+    return config_list
+
+
+def dict_update(raw_dict, update_dict):
+    for key in raw_dict.keys() & update_dict.keys():
+        raw_dict[key] = update_dict[key]
+    return raw_dict
+
+
+def hyper_report_generator(config, setting=None, acc=None):
+    DEFAULT_PARAMS = [
+        'idx', 'acc', 'model_id', 'model', 'root_path', 'data_path', 'features', 'test_idx',
+        'run_seed', 'seq_len', 'label_len', 'pred_len', 'enc_in', 'dec_in', 'c_out', 'd_model',
+        'n_heads', 'e_layers', 'd_layers', 's_layers', 'd_ff', 'dropout', 'train_epochs',
+        'batch_size', 'patience', 'learning_rate', 'loss', 'lradj', 'run_seed', 'case_name',
+        ]
+    DEFAULT_PATH = 'configs/batch_report.csv'
+
+    if not os.path.exists(DEFAULT_PATH):
+        pd.DataFrame(columns=DEFAULT_PARAMS).to_csv(DEFAULT_PATH, index=False)
+    report_df = pd.read_csv(DEFAULT_PATH, index_col=0)
+
+    print(f'Training report generating ... ({setting})')
+    report_dict = dict_update({key: None for key in DEFAULT_PARAMS}, vars(config))
+    report_dict.update({'idx': len(report_df) + 1})
+    if setting is not None:
+        report_dict.update({'case_name': setting})
+    if acc is not None:
+        report_dict.update({'acc': acc})
+
+    report_df = report_df.append(report_dict, ignore_index=True)
+    report_df[DEFAULT_PARAMS].to_csv(DEFAULT_PATH, index=False)
+
+
+def case_model_loader(folder_name):
+    pass
