@@ -251,7 +251,7 @@ def train_loss_plot(train_recorder, record_path):
     ax.plot(np.arange(len(train_recorder['train_loss'])),
             train_recorder['test_loss'], 'g-', label='test loss', lw=2.)
     plt.legend(loc='best')
-    plt.savefig(record_path + '/training_history.png')
+    plt.savefig(record_path + '/training_loss.png')
     plt.close()
 
 
@@ -287,19 +287,21 @@ def hybrid_data_check(raw, hybrid):
     return True
 
 
-def speed_power_converter(args, debug=False):
+def speed_power_converter(pred_target, debug=False):
     DEFAULT_POWER_BASELINE = 'datasets\WFP\Turbine_Patv_Spd_15min_filled.csv'
     DEFAULT_POWER_INDEX = ['320'] * 10 + ['265'] * 3
 
-    pred_type, pred_idx = args.target.split('_')
+    assert isinstance(pred_target, str), 'Input should be a string'
+    pred_type, pred_idx = pred_target.split('_')
 
     data_type = 'power'
     pow_func = lambda x: x
     baseline_data = None
-    pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
+    pow_capacity = 39.95
 
     if (not debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
         pow_func = turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power')
+        pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
 
         # load the baseline data and extract the power baseline
         pow_baseline = pd.read_csv(DEFAULT_POWER_BASELINE, index_col=None, header=0)
@@ -318,6 +320,8 @@ def speed_power_converter(args, debug=False):
     elif (debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
         pow_capacity = 20.
         data_type = 'speed'
+    elif (pred_type == 'Patv') and (pred_idx in [str(i) for i in range(1, 14)]):
+        pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
     elif (pred_type == 'Patv') and (pred_idx == 'Total'):
         pow_capacity = 39.95
 

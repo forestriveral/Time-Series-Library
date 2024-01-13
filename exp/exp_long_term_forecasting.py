@@ -40,11 +40,11 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         criterion = nn.MSELoss()
         return criterion
 
-    def logger(self, setting):
+    def logger(self, setting, action='training'):
         log_path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(log_path):
             os.makedirs(log_path)
-        log_file_path = log_path + f'/{self.args.model_id}_training_history.txt'
+        log_file_path = log_path + f'/{action}_history.txt'
         sys.stdout = logger(log_file_path)
 
     def recorder(self, setting, action='add', value=None):
@@ -62,7 +62,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             if not os.path.exists(record_path):
                 os.makedirs(record_path)
             record_json = json.dumps(self.train_recorder, indent=4)
-            with open(record_path + '/training_recorder.json', 'w+') as json_file:
+            with open(record_path + '/training_loss.json', 'w+') as json_file:
                 json_file.write(record_json)
             train_loss_plot(self.train_recorder, record_path)
         else:
@@ -333,7 +333,16 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             raise ValueError('No such a folder: {}'.format(folder_path))
 
         # check the prediction target is speed or power
-        convert = speed_power_converter(self.args, debug=False)
+        convert = speed_power_converter(self.args.target, debug=False)
 
-        slide_pred_plot(setting, convert=convert, save=folder_path)
-        slide_pred_accuracy(setting, convert=convert, save=folder_path)
+        slide_pred_plot(
+            setting,
+            convert=convert,
+            save=folder_path + 'slide_pred_plot.png',
+            )
+
+        slide_pred_accuracy(
+            setting,
+            convert=convert,
+            save=folder_path + 'slide_pred_acc.png',
+            )

@@ -2,8 +2,8 @@
 
 # basic config
 task_name: LTF
-is_training: 0
-model_id: Spd6
+is_training: 1
+model_id: Spd6_cfd_wrf
 model: Informer
 
 # data loader
@@ -11,7 +11,7 @@ data: turbine
 root_path: ./datasets/WFP/
 data_path: Turbine_Patv_Spd_15min_filled.csv
 features: S
-target: Wspd_6
+target: [Patv_6, Patv_7,]
 cols: []
 freq: t
 checkpoints: ./checkpoints/
@@ -27,9 +27,9 @@ use_filter:
 # hybrid training
 use_hybrid:
   flag: true
-  root_path: ./datasets/WRF/
-  data_path: extracted_wrf_data.csv
-  target: speed
+  root_path: ./datasets/CFD/
+  data_path: wrf_converted_turbine_data.csv
+  target: [Patv_6, Patv_7,]
 
 # forecasting task
 seq_len: 384
@@ -75,6 +75,7 @@ des: test
 loss: MSE
 lradj: type1
 use_amp: false
+is_logging: true
 
 # GPU
 use_gpu: true

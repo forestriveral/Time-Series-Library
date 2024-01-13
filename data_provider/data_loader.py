@@ -346,6 +346,8 @@ class Dataset_Turbine(Dataset):
                 self.cols = [self.cols]
             assert isinstance(self.cols, list)
             cols = self.cols.copy()
+        if self.target not in cols:
+            raise ValueError('Target should be in columns')
         cols.remove(self.target)
         cols.remove('date')
         df_raw = df_raw[['date'] + cols + [self.target]]

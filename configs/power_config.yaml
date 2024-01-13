@@ -2,14 +2,14 @@
 
 # basic config
 task_name: LTF
-is_training: 0
-model_id: farm
-model: PatchTST
+is_training: 1
+model_id: Patv_cfd_wrf
+model: Informer
 
 # data loader
 data: turbine
 root_path: ./datasets/WFP/
-data_path: Farm_Patv_15min.csv
+data_path: Turbine_Patv_Spd_15min_filled.csv
 features: S
 target: Patv_Total
 cols: []
@@ -26,14 +26,14 @@ use_filter:
 
 # hybrid training
 use_hybrid:
-  flag: false
-  root_path: ./datasets/WRF/
-  data_path: extracted_wrf_data.csv
+  flag: true
+  root_path: ./datasets/CFD/
+  data_path: wrf_converted_turbine_data.csv
   target: Patv_Total
 
 # forecasting task
-seq_len: 256
-label_len: 128
+seq_len: 384
+label_len: 96
 pred_len: 96
 seasonal_patterns: Monthly
 inverse: true
@@ -75,6 +75,7 @@ des: test
 loss: MSE
 lradj: type1
 use_amp: false
+is_logging: true
 
 # GPU
 use_gpu: true

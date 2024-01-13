@@ -88,7 +88,9 @@ def model_runner(config_path: str | Path) -> None:
                 args.distil,
                 args.des, ii)
 
-            # exp.logger(setting) # set training logger for recording
+            if args.is_logging:
+                exp.logger(setting)  # set training logger for recording print info
+
             print('\n>>>>>>> start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
 
@@ -125,6 +127,10 @@ def model_runner(config_path: str | Path) -> None:
             args.des, ii)
 
         exp = Exp(args)  # set experiments
+
+        if args.is_logging:
+                exp.logger(setting, 'testing')  # set training logger for recording print info
+
         print('\n>>>>>>> testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         # exp.test(setting, test=1)
         torch.cuda.empty_cache()
