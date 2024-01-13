@@ -24,6 +24,7 @@ def print_args(args):
     print(f'  {"Freq:":<20}{args.freq:<20}')
     print(f'  {"Checkpoints:":<20}{args.checkpoints:<20}')
     print(f'  {"Test Index:":<20}{args.test_idx:<20}')
+    print(f'  {"Run Seed:":<20}{args.run_seed:<20}')
     print()
 
     if args.use_filter.flag:
