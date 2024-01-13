@@ -127,6 +127,30 @@ def cal_accuracy(y_pred, y_true):
     return np.mean(y_pred == y_true)
 
 
+def setting_formatter(args, itr=0):
+    return '{}_{}_{}_{}_ft{}_ti{}_uf{}_uh{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
+                args.short_task_name,
+                args.model_id,
+                args.model,
+                args.data,
+                args.features,
+                args.test_idx,
+                int(args.use_filter.flag),
+                int(args.use_hybrid.flag),
+                args.seq_len,
+                args.label_len,
+                args.pred_len,
+                args.d_model,
+                args.n_heads,
+                args.e_layers,
+                args.d_layers,
+                args.d_ff,
+                args.factor,
+                args.embed,
+                args.distil,
+                args.des, itr)
+
+
 class logger(object):
     def __init__(self, filename="log.txt"):
         self.terminal = sys.stdout
@@ -419,6 +443,3 @@ def hyper_report_generator(config, setting=None, acc=None):
     report_df = report_df.append(report_dict, ignore_index=True)
     report_df[DEFAULT_PARAMS].to_csv(DEFAULT_PATH, index=False)
 
-
-def case_model_loader(folder_name):
-    pass

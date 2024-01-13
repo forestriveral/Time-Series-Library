@@ -12,7 +12,7 @@ from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
 from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification import Exp_Classification
 from utils.print_args import print_args
-from utils.tools import ModelConfig, DotDict, param_list_converter
+from utils.tools import ModelConfig, DotDict, param_list_converter, setting_formatter
 
 
 def model_runner(config: str | Path | Dict, seed=None, report=False) -> None:
@@ -92,28 +92,9 @@ def model_runner(config: str | Path | Dict, seed=None, report=False) -> None:
     if args.is_training:
         for ii in range(args.itr):
             # setting record of experiments
+            setting = setting_formatter(args, ii)
+
             exp = Exp(args)  # set experiments
-            setting = '{}_{}_{}_{}_ft{}_ti{}_uf{}_uh{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
-                args.short_task_name,
-                args.model_id,
-                args.model,
-                args.data,
-                args.features,
-                args.test_idx,
-                int(args.use_filter.flag),
-                int(args.use_hybrid.flag),
-                args.seq_len,
-                args.label_len,
-                args.pred_len,
-                args.d_model,
-                args.n_heads,
-                args.e_layers,
-                args.d_layers,
-                args.d_ff,
-                args.factor,
-                args.embed,
-                args.distil,
-                args.des, ii)
 
             if args.is_logging:
                 exp.logger(setting)  # set training logger for recording print info
@@ -130,28 +111,7 @@ def model_runner(config: str | Path | Dict, seed=None, report=False) -> None:
 
             print('\n>>>>>>> training finish : {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
     else:
-        ii = 0
-        setting = '{}_{}_{}_{}_ft{}_ti{}_uf{}_uh{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
-            args.short_task_name,
-            args.model_id,
-            args.model,
-            args.data,
-            args.features,
-            args.test_idx,
-            int(args.use_filter.flag),
-            int(args.use_hybrid.flag),
-            args.seq_len,
-            args.label_len,
-            args.pred_len,
-            args.d_model,
-            args.n_heads,
-            args.e_layers,
-            args.d_layers,
-            args.d_ff,
-            args.factor,
-            args.embed,
-            args.distil,
-            args.des, ii)
+        setting = setting_formatter(args)
 
         exp = Exp(args)  # set experiments
 
@@ -166,6 +126,21 @@ def model_runner(config: str | Path | Dict, seed=None, report=False) -> None:
         exp.eval(setting, report=report)
 
         print('\n>>>>>>> testing finish : {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+
+
+def model_loader(case_name, mode='test', report=False) -> None:
+    case_name = 'LTF_Spd6_cfd_wrf_Informer_turbine_ftM_ti5_uf0_uh1_sl384_ll96_pl96_dm512_nh8_el3_dl2_df2048_fc1_ebtimeF_dtTrue_test_0'
+
+    # load the config file in the case folder
+    config_path = Path('results') / case_name / 'config.yaml'
+    config_dict = ModelConfig.load_yaml(Path(config_path).resolve())
+    print(f'Loading config file from {config_path}')
+
+    # set the mode of model loader
+    config_dict.is_training = 0 if mode == 'test' else 1
+    print(f'Setting model to {mode.upper()} mode')
+
+    model_runner(config_dict, seed=2024, report=report)
 
 
 if __name__ == '__main__':
