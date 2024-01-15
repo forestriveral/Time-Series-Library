@@ -2,7 +2,7 @@ from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, \
     logger, config_format, train_loss_plot, speed_power_converter, \
-        hyper_report_generator
+        training_report_generator
 from utils.evaluation import slide_pred_plot, slide_pred_accuracy
 from utils.metrics import metric
 import torch
@@ -59,7 +59,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         elif action == 'save':
             assert hasattr(self, 'train_recorder'), \
                 'Please initialize the recorder first by action="init"'
-            record_path = os.path.join('./results/', setting)
+            record_path = os.path.join(self.args.res_path, setting)
             if not os.path.exists(record_path):
                 os.makedirs(record_path)
             record_json = json.dumps(self.train_recorder, indent=4)
@@ -224,7 +224,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         preds = []
         trues = []
-        folder_path = './results/' + setting + '/'
+        folder_path = self.args.res_path + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -295,10 +295,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         print('\ttest shape:', preds.shape, trues.shape)
 
         timestamps = np.array(test_data.test_stamp)
-        print('\ttime range: [', timestamps.min(), '==>', timestamps.max(), ']')
+        print('\ttime range: [', timestamps[0, 0, 0], '==>', timestamps[-1, -1, 0], ']')
 
         # result save
-        folder_path = './results/' + setting + '/'
+        folder_path = self.args.res_path + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -329,7 +329,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         return
 
     def eval(self, setting, report=False):
-        folder_path = './results/' + setting + '/'
+        folder_path = self.args.res_path + setting
         if not os.path.exists(folder_path):
             raise ValueError('No such a folder: {}'.format(folder_path))
 
@@ -337,16 +337,16 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         convert = speed_power_converter(self.args.target, debug=False)
 
         _ = slide_pred_plot(
-            setting,
+            folder_path,
             convert=convert,
-            save=folder_path + 'slide_pred_plot.png',
+            save=folder_path + '/pred_plot.png',
             )
 
         acc = slide_pred_accuracy(
-            setting,
+            folder_path,
             convert=convert,
-            save=folder_path + 'slide_pred_acc.png',
+            save=folder_path + '/pred_acc.png',
             )
 
         if report:
-            hyper_report_generator(self.args, setting, acc=acc)
+            training_report_generator(self.args, setting, acc=acc)

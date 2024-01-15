@@ -281,7 +281,7 @@ def train_loss_plot(train_recorder, record_path):
     plt.close()
 
 
-def turbine_curve_loader(wt, param):
+def turbine_curve_loader(wt, param, verbose=False):
     wts = ['320', '265']; params = ['power', 'thrust', 'C_p', 'C_t']
     power_curve = pd.read_csv('datasets/WFP/Turbine_Power_Curve.csv', index_col=None, header=0)
     # print(power_curve.shape)
@@ -300,7 +300,8 @@ def turbine_curve_loader(wt, param):
         kind='slinear',
         fill_value='extrapolate')
 
-    print(f'Turbine {wt} {param} curve loading ...')
+    if verbose:
+        print(f'Turbine {wt} {param} curve loading ...')
 
     return interp_func
 
@@ -317,11 +318,13 @@ def hybrid_data_check(raw, hybrid):
 def param_list_converter(param_list):
     assert isinstance(param_list, list), 'Input should be a list'
     for i, param in enumerate(param_list):
-        assert isinstance(param, (str, list))
-        if len(param) == 0:
+        if isinstance(param, (str, list)):
+            if len(param) == 0:
+                param_list[i] = None
+            elif isinstance(param, str) and len(param) > 0:
+                param_list[i] = [param]
+        else:
             param_list[i] = None
-        elif isinstance(param, str) and len(param) > 0:
-            param_list[i] = [param]
     return param_list
 
 
@@ -340,7 +343,7 @@ def speed_power_converter(pred_target, debug=False):
         pow_capacity = 39.95
 
         if (not debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
-            pow_func = turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power')
+            pow_func = turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power', verbose=True)
             pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
             pow_baseline = pow_baseline[['date', f'Patv_{pred_idx}']]
 
@@ -370,7 +373,7 @@ def speed_power_converter(pred_target, debug=False):
         for pred in pred_target:
             pred_type, pred_idx = pred.split('_')
             if (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
-                pow_funcs.append(turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power'))
+                pow_funcs.append(turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power', verbose=False))
             else:
                 pow_funcs.append(lambda x: x)
             pow_caps.append(float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.)
@@ -413,13 +416,13 @@ def finetune_config_generator(config_dict):
     return config_list
 
 
-def dict_update(raw_dict, update_dict):
+def config_dict_update(raw_dict, update_dict):
     for key in raw_dict.keys() & update_dict.keys():
         raw_dict[key] = update_dict[key]
     return raw_dict
 
 
-def hyper_report_generator(config, setting=None, acc=None):
+def training_report_generator(config, setting, acc=None):
     DEFAULT_PARAMS = [
         'idx', 'acc', 'model_id', 'model', 'root_path', 'data_path', 'features', 'test_idx',
         'run_seed', 'seq_len', 'label_len', 'pred_len', 'enc_in', 'dec_in', 'c_out', 'd_model',
@@ -433,10 +436,9 @@ def hyper_report_generator(config, setting=None, acc=None):
     report_df = pd.read_csv(DEFAULT_PATH, index_col=0)
 
     print(f'Training report generating ... ({setting})')
-    report_dict = dict_update({key: None for key in DEFAULT_PARAMS}, vars(config))
-    report_dict.update({'idx': len(report_df) + 1})
-    if setting is not None:
-        report_dict.update({'case_name': setting})
+    report_dict = config_dict_update({key: None for key in DEFAULT_PARAMS}, vars(config))
+    report_dict.update({'idx': str(len(report_df) + 1)})
+    report_dict.update({'case_name': setting})
     if acc is not None:
         report_dict.update({'acc': acc})
 

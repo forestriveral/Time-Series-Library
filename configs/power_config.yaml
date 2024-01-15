@@ -10,8 +10,10 @@ model: Informer
 data: turbine
 root_path: ./datasets/WFP/
 data_path: Turbine_Patv_Spd_15min_filled.csv
+res_path: ./results/
 features: S
-target: Patv_Total
+target:
+  - Patv_Total
 subcol: []
 freq: t
 checkpoints: ./checkpoints/
@@ -23,7 +25,8 @@ use_hybrid:
   flag: true
   root_path: ./datasets/CFD/
   data_path: wrf_converted_turbine_data.csv
-  target: Patv_Total
+  target:
+    - Patv_Total
 
 # filter setting
 use_filter:
@@ -89,3 +92,4 @@ p_hidden_dims:
   - 128
   - 128
 p_hidden_layers: 2
+short_task_name: LTF

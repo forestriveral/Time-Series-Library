@@ -1,4 +1,5 @@
 import os
+import copy
 import random
 import torch
 import argparse
@@ -12,13 +13,26 @@ from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
 from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification import Exp_Classification
 from utils.print_args import print_args
-from utils.tools import ModelConfig, DotDict, param_list_converter, setting_formatter
+from utils.tools import ModelConfig, DotDict, param_list_converter, \
+    setting_formatter, finetune_config_generator
 
 
-def model_runner(config: str | Path | Dict, seed=None, report=False) -> None:
-    args = argparse.Namespace(**ModelConfig(config))
+# define the type of config
+ConfigType = str | Path | Dict | argparse.Namespace
+
+
+def model_runner(
+    config: ConfigType,
+    seed: int | None = None,
+    report: bool = False,
+    ) -> None:
+
+    if not isinstance(config, argparse.Namespace):
+        args = argparse.Namespace(**ModelConfig(config))
+    else:
+        args = config
+
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
-
     args.use_filter = DotDict(args.use_filter)
     args.use_hybrid = DotDict(args.use_hybrid)
 
@@ -123,30 +137,118 @@ def model_runner(config: str | Path | Dict, seed=None, report=False) -> None:
         torch.cuda.empty_cache()
 
         print('\n>>>>>>> evaluating : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.eval(setting, report=report)
+        exp.eval(setting, report=False)
 
         print('\n>>>>>>> testing finish : {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
 
 
-def model_loader(case_name, mode='test', report=False) -> None:
-    case_name = 'LTF_Spd6_cfd_wrf_Informer_turbine_ftM_ti5_uf0_uh1_sl384_ll96_pl96_dm512_nh8_el3_dl2_df2048_fc1_ebtimeF_dtTrue_test_0'
+def model_runner_from_case(
+    case_path: str | Path | None = None,
+    mode: str = 'test',
+    seed: int | None = None,
+    report: bool = False,
+    ) -> None:
+    if case_path is None:
+        case_path = './results/LTF_Wspd_cfd_wrf_Informer_turbine_ftM_ti5_uf0_uh1_sl384_ll96_pl96_dm512_nh8_el3_dl2_df2048_fc1_ebtimeF_dtTrue_test_0'
 
     # load the config file in the case folder
-    config_path = Path('results') / case_name / 'config.yaml'
-    config_dict = ModelConfig.load_yaml(Path(config_path).resolve())
+    config_path = f'{case_path}/config.yaml'
+    config = argparse.Namespace(**ModelConfig(config_path))
     print(f'Loading config file from {config_path}')
 
     # set the mode of model loader
-    config_dict.is_training = 0 if mode == 'test' else 1
+    if mode == 'test':
+        config.is_training = 0
+    elif mode == 'train':
+        config.is_training = 1
+    else:
+        raise ValueError('Invalid mode input')
     print(f'Setting model to {mode.upper()} mode')
 
-    model_runner(config_dict, seed=2024, report=report)
+    model_runner(config, seed=seed, report=report)
+
+
+def model_runner_for_cross_val(
+    config: ConfigType,
+    mode: str = 'train',
+    fname: str | None = None,
+    seed: int | None = None,
+    report: bool = False,
+    ) -> None:
+    config = argparse.Namespace(**ModelConfig(config))
+
+    VAL_TEST_IDX = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    DEFAULT_FOLDER_NAME = fname or 'cross_val'
+
+    # set the mode of model loader
+    if mode == 'test':
+        config.is_training = 0
+    elif mode == 'train':
+        config.is_training = 1
+    else:
+        raise ValueError('Invalid mode input')
+    print(f'Setting model to {mode.upper()} mode')
+
+    # set the folder name of results and checkpoints
+    config.res_path = f'./results/{DEFAULT_FOLDER_NAME}/'
+    config.res_path = f'./checkpoints/{DEFAULT_FOLDER_NAME}/'
+
+    for test_idx in VAL_TEST_IDX:
+        config_idx = copy.deepcopy(config)
+        config_idx.test_idx = test_idx
+        config_idx.model_id = f'cro_val_{test_idx}_{config.model_id}'
+        print(f'\n*************** Cross validation test index: {test_idx} ***************')
+
+        # model runner training and testing
+        model_runner(config_idx, seed=seed, report=report)
+
+        print(f'*************** Cross validation test index: {test_idx} finished! ***************\n')
+
+    print('All cross validation finished!')
+
+    return None
+
+
+def model_runner_for_finetuning(
+    config: str | Path,
+    hyper_config: str | Path,
+    report: bool = False,
+    ) -> None:
+
+    hyper_configs = ModelConfig.load_yaml(Path(hyper_config).resolve())
+    base_config = ModelConfig.load_yaml(Path(config).resolve())
+
+    hyper_config_list = finetune_config_generator(hyper_configs)
+    print('Testing model number: ', len(hyper_config_list))
+
+    hyper_des_suffix = 'hyper'
+    for hyper_i, hyper_config_i in enumerate(hyper_config_list):
+        base_config_i = copy.deepcopy(base_config)
+        base_config_i.update(hyper_config_i)
+        base_config.des = f'{hyper_des_suffix}_{hyper_i}'
+
+        random_seed = np.random.randint(1000, 10000)
+
+        model_runner(base_config_i, seed=random_seed, report=report)
+
+    print('All models have been tested!')
+
+    return None
+
 
 
 if __name__ == '__main__':
     # config = 'configs/power_config.yaml'
-    # config = 'configs/speed_config.yaml'
+    config = 'configs/speed_config.yaml'
     # config = 'configs/multiple_power_config.yaml'
-    config = 'configs/multiple_speed_config.yaml'
+    # config = 'configs/multiple_speed_config.yaml'
 
-    model_runner(config, report=False)
+    hyper_config = 'configs/hyper_config.yaml'
+
+    model_runner(config, report=True)
+
+    # model_runner_for_cross_val(config, fname='cross_val_wrf', report=True)
+
+    # model_runner_from_case()
+
+    # model_runner_for_finetuning(config, hyper_config)

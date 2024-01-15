@@ -10,6 +10,7 @@ def print_args(args):
     print(f'  {"Data:":<20}{args.data:<20}')
     print(f'  {"Root Path:":<20}{args.root_path:<20}')
     print(f'  {"Data Path:":<20}{args.data_path:<20}')
+    print(f'  {"Result Path:":<20}{args.res_path:<20}')
     print(f'  {"Features:":<20}{args.features:<20}')
 
     print_target = ' '.join(args.target)

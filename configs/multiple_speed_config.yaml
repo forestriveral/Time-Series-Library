@@ -3,15 +3,29 @@
 # basic config
 task_name: LTF
 is_training: 0
-model_id: Spd6_cfd_wrf
-model: Informer
+model_id: Wspd_cfd_wrf
+model: iTransformer
 
 # data loader
 data: turbine
 root_path: ./datasets/WFP/
 data_path: Turbine_Patv_Spd_15min_filled.csv
+res_path: ./results/
 features: M
-target: [Wspd_6, Wspd_7,]
+target:
+  - Wspd_1
+  - Wspd_2
+  - Wspd_3
+  - Wspd_4
+  - Wspd_5
+  - Wspd_6
+  - Wspd_7
+  - Wspd_8
+  - Wspd_9
+  - Wspd_10
+  - Wspd_11
+  - Wspd_12
+  - Wspd_13
 subcol: []
 freq: t
 checkpoints: ./checkpoints/
@@ -23,7 +37,20 @@ use_hybrid:
   flag: true
   root_path: ./datasets/CFD/
   data_path: wrf_converted_turbine_data.csv
-  target: [Wspd_6, Wspd_7,]
+  target:
+    - Wspd_1
+    - Wspd_2
+    - Wspd_3
+    - Wspd_4
+    - Wspd_5
+    - Wspd_6
+    - Wspd_7
+    - Wspd_8
+    - Wspd_9
+    - Wspd_10
+    - Wspd_11
+    - Wspd_12
+    - Wspd_13
 
 # filter setting
 use_filter:
@@ -89,3 +116,4 @@ p_hidden_dims:
   - 128
   - 128
 p_hidden_layers: 2
+short_task_name: LTF

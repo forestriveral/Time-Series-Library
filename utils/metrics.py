@@ -75,4 +75,4 @@ def Acc_day_ahead(pred, true, Cap):
 
 
 def Acc_hour_ahead_power(pred, true, Cap, P_N):
-    return (85. - Acc_day_ahead(pred, true, Cap)) * P_N * 0.6
+    return (85. - Acc_day_ahead(pred, true, Cap)) * P_N * 0.4
