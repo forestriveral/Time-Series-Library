@@ -3,8 +3,8 @@
 # basic config
 task_name: LTF
 is_training: 1
-model_id: Wspd6_cfd_wts
-model: DLinear
+model_id: Wspd6_cfd_wrf
+model: MICN
 
 # data loader
 data: turbine
@@ -17,14 +17,14 @@ target:
 subcol: []
 freq: t
 checkpoints: ./checkpoints/
-test_idx: 6
+test_idx: 5
 run_seed: 2024
 
 # hybrid training
 use_hybrid:
   flag: true
   root_path: ./datasets/CFD/
-  data_path: wts_converted_turbine_data.csv
+  data_path: wrf_converted_turbine_data.csv
   target:
     - Wspd_6
 

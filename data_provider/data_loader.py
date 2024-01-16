@@ -439,9 +439,10 @@ class Dataset_Turbine(Dataset):
         r_end = r_begin + self.label_len + self.pred_len
 
         if self.hybrid.flag and self.hybrid_data is not None:
-            # self.hybrid_data = self.data_y
             data_y_hybrid = np.concatenate(
-                [self.hybrid_data[s_end:r_end], self.data_y[s_end:r_end]], axis=0)
+                [self.hybrid_data[r_end - self.label_len:r_end],
+                 self.data_y[s_end:r_end]],
+                axis=0)
         else:
             data_y_hybrid = self.data_y[r_begin:r_end]
 

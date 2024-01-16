@@ -5,7 +5,7 @@ import torch
 import argparse
 import numpy as np
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, Dict, Union, List, Tuple
 
 from exp.exp_long_term_forecasting import Exp_Long_Term_Forecast
 from exp.exp_imputation import Exp_Imputation
@@ -23,7 +23,7 @@ ConfigType = str | Path | Dict | argparse.Namespace
 
 def model_runner(
     config: ConfigType,
-    seed: int | None = None,
+    seed: Optional[int] = None,
     report: bool = False,
     ) -> None:
 
@@ -125,7 +125,7 @@ def model_runner(
 
             print('\n>>>>>>> training finish : {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
     else:
-        setting = setting_formatter(args)
+        setting = setting_formatter(args, 0)
 
         exp = Exp(args)  # set experiments
 
@@ -143,9 +143,9 @@ def model_runner(
 
 
 def model_runner_from_case(
-    case_path: str | Path | None = None,
+    case_path: Optional[str | Path]  = None,
     mode: str = 'test',
-    seed: int | None = None,
+    seed: Optional[int] = None,
     report: bool = False,
     ) -> None:
     if case_path is None:
@@ -171,8 +171,8 @@ def model_runner_from_case(
 def model_runner_for_cross_val(
     config: ConfigType,
     mode: str = 'train',
-    fname: str | None = None,
-    seed: int | None = None,
+    fname: Optional[str] = None,
+    seed: Optional[int] = None,
     report: bool = False,
     ) -> None:
     config = argparse.Namespace(**ModelConfig(config))
@@ -209,6 +209,53 @@ def model_runner_for_cross_val(
     return None
 
 
+def model_runner_for_models(
+    config: ConfigType,
+    seed: Optional[int] = None,
+    report: bool = True,
+    ) -> None:
+    config = argparse.Namespace(**ModelConfig(config))
+
+    MODEL_TEST_NAMES = [
+        # 'Autoformer',
+        'Transformer',
+        'Nonstationary_Transformer',
+        'DLinear',
+        'FEDformer',
+        'Informer',
+        'LightTS',
+        'Reformer',
+        'ETSformer',
+        'PatchTST',
+        'Pyraformer',
+        'MICN',
+        'Crossformer',
+        'FiLM',
+        'iTransformer',
+        'Koopa',
+        'TiDE',
+        'FreTS',
+    ]
+
+    for model_i in MODEL_TEST_NAMES:
+        config_idx = copy.deepcopy(config)
+        config_idx.is_training = 1
+        config_idx.model = model_i
+
+        print(f'\n*************** Model Testing: {model_i} ***************')
+
+        try:
+            # model runner training and testing
+            model_runner(config_idx, seed=seed, report=report)
+        except:
+            print(f'*************** Model Testing: {model_i} failed! ***************\n')
+            continue
+
+        print(f'*************** Model Testing: {model_i} finished! ***************\n')
+
+    print('All model testings finished!')
+
+
 def model_runner_for_finetuning(
     config: str | Path,
     hyper_config: str | Path,
@@ -239,13 +286,15 @@ def model_runner_for_finetuning(
 
 if __name__ == '__main__':
     # config = 'configs/power_config.yaml'
-    config = 'configs/speed_config.yaml'
+    # config = 'configs/speed_config.yaml'
     # config = 'configs/multiple_power_config.yaml'
-    # config = 'configs/multiple_speed_config.yaml'
+    config = 'configs/multiple_speed_config.yaml'
 
     hyper_config = 'configs/hyper_config.yaml'
 
     model_runner(config, report=True)
+
+    # model_runner_for_models(config, report=True)
 
     # model_runner_for_cross_val(config, fname='cross_val_wrf', report=True)
 

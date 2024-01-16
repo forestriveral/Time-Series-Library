@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.ticker import MultipleLocator
+from typing import Optional, Tuple, List
 
 try:
     from utils.divider import dataset_divider
@@ -18,7 +19,9 @@ except:
         Acc_day_ahead, Acc_hour_ahead_power
 
 
-def pred_true_load(case_path):
+def pred_true_load(
+    case_path: str,
+    ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
     print('Loading prediction and true data ....')
 
     if os.path.exists(case_path + '/test.npy'):
@@ -37,10 +40,10 @@ def pred_true_load(case_path):
 
 
 def slide_pred_plot(
-    case=None,
-    convert=None,
-    save=None,
-    data=(),
+    case: Optional[str] = None,
+    convert: Optional[speed_power_converter] = None,
+    save: Optional[str] = None,
+    data: Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]] = ()
     ) -> None:
     if case is not None:
         preds, trues, times = pred_true_load(case)
@@ -146,11 +149,11 @@ def slide_pred_plot(
     return None
 
 def slide_pred_accuracy(
-    case=None,
-    metric='Acc_day_ahead',
-    convert=None,
-    save=None,
-    data=(),
+    case: Optional[str] = None,
+    metric: str = 'Acc_day_ahead',
+    convert: Optional[speed_power_converter] = None,
+    save: Optional[str] = None,
+    data: Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]] = ()
     ) -> float:
     if case is not None:
         preds, trues, times = pred_true_load(case)
@@ -199,8 +202,10 @@ def slide_pred_accuracy(
     pred = pred[:slide_num]
     true = true[:slide_num]
 
-    print('Prediction Accuracy calculating ....')
-    print('\tTime Range: ', time[0, 0], 'to', time[-1, -1])
+    print(f'Prediction Accuracy calculating ({metric}) ....')
+    time_start = pd.to_datetime(time[0, 0]).strftime('%Y-%m-%d %H:%M:%S')
+    time_end = pd.to_datetime(time[-1, -1]).strftime('%Y-%m-%d %H:%M:%S')
+    print(f'\tTime Range: {time_start} to {time_end}')
 
     metric_dict = {
         'E_rmse': E_rmse,
@@ -220,7 +225,8 @@ def slide_pred_accuracy(
         if metric == 'Acc_day_ahead':
             powers.append(Acc_hour_ahead_power(pred[i], true[i], capacity, capacity))
     precisions = np.array(precisions)
-    powers = np.where(precisions >= acc_require, 0., np.array(powers))
+    if metric == 'Acc_day_ahead':
+        powers = np.where(precisions >= acc_require, 0., np.array(powers))
 
     bar_colors = 'skyblue'
     bar_hatches = ''
@@ -248,7 +254,7 @@ def slide_pred_accuracy(
             ax.text(bar.get_x() + bar.get_width() / 2., yval + acc_max * 0.025, f'({powers[i]:.0f})',
                     va='bottom', ha='center', color='r', fontsize=12)
 
-    ax.set_xlabel(f'Days ({times.min()} to {times.max()})', fontsize=15)
+    ax.set_xlabel(f'Days ({time_start} to {time_end})', fontsize=15)
     # ax.set_xlim([0., len(precisions) + 3])
     ax.set_xticks(np.linspace(1, len(precisions), 9, endpoint=True, dtype=int))
     ax.set_ylabel(f'{metric} (%)', fontsize=15)
@@ -270,13 +276,13 @@ def slide_pred_accuracy(
 
 
 def cfd_converted_data_eval(
-    ref='wrf',
-    idx=None,
-    year=2022,
-    month=6,
-    col='Patv_Total',
-    step=96,
-    ):
+    ref: str = 'wrf',
+    idx: Optional[int] = None,
+    year: int = 2022,
+    month: int = 6,
+    col: str = 'Patv_Total',
+    step: int = 96,
+    ) -> None:
     wt_df = pd.read_csv('datasets\WFP\Turbine_Patv_Spd_15min_filled.csv', index_col=None, header=0)
     if ref == 'wrf':
         cfd_df = pd.read_csv('datasets\CFD\wrf_converted_turbine_data.csv', index_col=None, header=0)
@@ -289,6 +295,7 @@ def cfd_converted_data_eval(
         start = datetime.date(year=year, month=month, day=1)
         end = datetime.date(year=year, month=month + 1, day=1)
         eval_times = pd.date_range(start, end, freq='15T', inclusive='left')
+        days_num = (eval_times.max() - eval_times.min()).days + 1
     else:
         assert isinstance(idx, int) and idx >= 1 and idx <= 12
         DEFAULT_DATASET_LEN = 35136
@@ -296,17 +303,18 @@ def cfd_converted_data_eval(
         idx_start, idx_end = border1s[-1][0], border2s[-1][0]
         start = wt_df['date'][idx_start]; end = wt_df['date'][idx_end]
         eval_times = pd.date_range(start, end, freq='15T', inclusive='left')
-    print('Evaluation Time Range: ', eval_times.min(), 'to', eval_times.max())
+        days_num = 30 if len(eval_times) >= 30 * step else len(eval_times) // step
+        eval_times = eval_times[:days_num * step]
+    # convert the time range to string
+    time_start = eval_times.min().strftime('%Y-%m-%d %H:%M:%S')
+    time_end = eval_times.max().strftime('%Y-%m-%d %H:%M:%S')
+    print(f'Time Range [{days_num} days]: {time_start} to {time_end}')
 
     wt_df['date'] = pd.to_datetime(wt_df['date']); wt_df.set_index('date', inplace=True)
     cfd_df['date'] = pd.to_datetime(cfd_df['date']); cfd_df.set_index('date', inplace=True)
 
-    # compute the days numebr of evaluation time range
-    days_num = (eval_times.max() - eval_times.min()).days + 1
-    print('Number of days: ', days_num)
-
     # extract data of evaluation time range
-    time = eval_times.values.reshape(days_num, step, -1)
+    time = eval_times.values[:days_num * step].reshape(days_num, step, -1)
     wt_data = wt_df.loc[eval_times, col].values.reshape(days_num, step, -1)
     cfd_data = cfd_df.loc[eval_times, col].values.reshape(days_num, step, -1)
     # print('Number of true samples: ', wt_data.shape)
@@ -315,9 +323,9 @@ def cfd_converted_data_eval(
     convert = speed_power_converter(col, )
 
     if idx is None:
-        save_suffix = f'datasets/CFD/{ref}2cfd_{year}_{month}'
+        save_suffix = f'datasets/CFD/cfd_{ref}_{year}_{month}'
     else:
-        save_suffix = f'datasets/CFD/{ref}2cfd_idx_{idx}'
+        save_suffix = f'datasets/CFD/cfd_{ref}_idx_{idx}'
 
     slide_pred_plot(
         data=(cfd_data, wt_data, time),
@@ -338,3 +346,6 @@ if __name__ == '__main__':
     # slide_pred_accuracy(case_1)
 
     cfd_converted_data_eval(idx=1)
+
+    # for data_idx in range(1, 13):
+    #     cfd_converted_data_eval(idx=data_idx)

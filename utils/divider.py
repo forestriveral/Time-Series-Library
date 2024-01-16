@@ -1,10 +1,14 @@
-import random
 import numpy as np
 import pandas as pd
 
+from typing import List, Tuple, Optional
 
 # extract two months data from the training datset
-def dataset_divider(data_len, data_idx, verbose=False):
+def dataset_divider(
+    data_len: int,
+    data_idx: int,
+    verbose: bool = False,
+    ) -> Tuple[List[List[int]], List[List[int]]]:
     split_part_num = 12
     val_part_num = 2
     test_part_num = 1
@@ -52,7 +56,11 @@ def dataset_divider(data_len, data_idx, verbose=False):
     return border1s, border2s
 
 
-def dataset_reader(data, border1s, border2s):
+def dataset_reader(
+    data: pd.DataFrame | np.ndarray,
+    border1s: List[int] | int,
+    border2s: List[int] | int,
+    ) -> pd.DataFrame | np.ndarray:
     assert isinstance(border1s, (list, int)) and isinstance(border2s, (list, int))
 
     if isinstance(border1s, int):
@@ -76,7 +84,10 @@ def dataset_reader(data, border1s, border2s):
     return combined_data
 
 
-def split_calculator(border1s, border2s):
+def split_calculator(
+    border1s: List[List[int]],
+    border2s: List[List[int]],
+    ) -> List[List[int]]:
     assert isinstance(border1s, list) and isinstance(border2s, list)
     assert len(border1s) == len(border2s) == 3
 
@@ -89,7 +100,11 @@ def split_calculator(border1s, border2s):
     return split_num
 
 
-def dataset_indexer(index, split_num, seq_pred_len):
+def dataset_indexer(
+    index: int,
+    split_num: List[int],
+    seq_pred_len: int,
+    ) -> int:
     split_num = np.cumsum(np.array(split_num) - seq_pred_len + 1)
     for j in range(len(split_num)):
         if index < split_num[j]:

@@ -2,9 +2,9 @@
 
 # basic config
 task_name: LTF
-is_training: 0
+is_training: 1
 model_id: Wspd_cfd_wrf
-model: iTransformer
+model: Informer
 
 # data loader
 data: turbine
@@ -60,8 +60,8 @@ use_filter:
   cutoff: 0.1
 
 # forecasting task
-seq_len: 384
-label_len: 96
+seq_len: 96
+label_len: 48
 pred_len: 96
 seasonal_patterns: Monthly
 inverse: true
@@ -82,11 +82,11 @@ d_model: 512
 n_heads: 8
 e_layers: 3
 d_layers: 2
-d_ff: 2048
+d_ff: 1024
 moving_avg: 25
-factor: 1
+factor: 3
 distil: true
-dropout: 0.2
+dropout: 0.15
 embed: timeF
 activation: gelu
 output_attention: false

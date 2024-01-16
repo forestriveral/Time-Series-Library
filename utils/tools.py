@@ -4,6 +4,7 @@ import math
 import yaml
 import copy
 import torch
+import argparse
 import itertools
 import numpy as np
 import pandas as pd
@@ -11,9 +12,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy import signal
 from scipy import interpolate
-from collections import OrderedDict
 
 from typing import Any, List, Dict, Callable, Literal, Optional
+
 
 plt.switch_backend('agg')
 
@@ -127,7 +128,10 @@ def cal_accuracy(y_pred, y_true):
     return np.mean(y_pred == y_true)
 
 
-def setting_formatter(args, itr=0):
+def setting_formatter(
+    args: argparse.Namespace,
+    itr: Optional[int] = None,
+    ) -> str:
     return '{}_{}_{}_{}_ft{}_ti{}_uf{}_uh{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
                 args.short_task_name,
                 args.model_id,
@@ -152,12 +156,18 @@ def setting_formatter(args, itr=0):
 
 
 class logger(object):
-    def __init__(self, filename="log.txt"):
+    def __init__(
+        self,
+        filename: str | Path = './log.txt',
+        ) -> None:
         self.terminal = sys.stdout
         # with open(filename, 'r+') as file: file.truncate(0)
         self.log = open(filename, "a")
 
-    def write(self, message):
+    def write(
+        self,
+        message: str,
+        ) -> None:
         self.log.write(message)
         self.terminal.write(message)
         self.log.flush()
@@ -167,11 +177,17 @@ class logger(object):
 
 
 class Loader(yaml.SafeLoader):
-    def __init__(self, stream: str | Path) -> None:
+    def __init__(
+        self,
+        stream: str | Path,
+        ) -> None:
         self._root = os.path.split(stream.name)[0]
         super().__init__(stream)
 
-    def include(self, node: yaml.Node) -> Dict[Any, Any]:
+    def include(
+        self,
+        node: yaml.Node,
+        ) -> Dict[Any, Any]:
         filename = os.path.join(self._root, self.construct_scalar(node))
         with open(filename, 'r') as f:
             return yaml.load(f, self.__class__)
@@ -181,10 +197,17 @@ Loader.add_constructor('!include', Loader.include)
 
 
 class DotDict(dict):
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        **kwargs
+        ) -> None:
         super(DotDict, self).__init__(*args, **kwargs)
 
-    def __getattr__(self, key: str) -> Any:
+    def __getattr__(
+        self,
+        key: str
+        ) -> Any:
         try:
             value = self[key]
             if isinstance(value, dict):
@@ -193,7 +216,11 @@ class DotDict(dict):
         except:
             return super().__getattribute__(key)
 
-    def __deepcopy__(self, memo: Any, _nil: List[Any] = []) -> Dict[Any, Any] | List[Any]:
+    def __deepcopy__(
+        self,
+        memo: Any,
+        _nil: List[Any] = [],
+        ) -> Dict[Any, Any] | List[Any]:
         if memo is None:
             memo = {}
         d = id(self)
@@ -210,17 +237,27 @@ class DotDict(dict):
 
 
 class ModelConfig(DotDict):
-    def __init__(self, input_config: str | Path | Dict) -> None:
+    def __init__(
+        self,
+        input_config: str | Path | Dict,
+        ) -> None:
         if isinstance(input_config, str) or isinstance(input_config, Path):
             input_config = ModelConfig.load_yaml(Path(input_config).resolve())
         super().__init__(input_config)
 
     @classmethod
-    def load_yaml(cls, filename: str, loader: yaml.SafeLoader = Loader) -> Dict[Any, Any]:
+    def load_yaml(
+        cls,
+        filename: str,
+        loader: yaml.SafeLoader = Loader,
+        ) -> Dict[Any, Any]:
         with open(filename) as fid:
             return yaml.load(fid, loader)
 
-    def to_yaml(self, output_file_path: str | Path) -> None:
+    def to_yaml(
+        self,
+        output_file_path: str | Path,
+        ) -> None:
         with open(output_file_path, "w+") as output_file:
             yaml.dump(
                 dict(self),
@@ -230,13 +267,21 @@ class ModelConfig(DotDict):
                 )
 
 
-def data_filter(sample, n=5, cut_off=0.15):
+def data_filter(
+    sample: np.ndarray,
+    n: int = 5,
+    cut_off: float = 0.15,
+    ) -> np.ndarray:
     b1, a1 = signal.butter(n, cut_off, 'lowpass')
     b2, a2 = signal.butter(n, cut_off, 'highpass')
     return signal.filtfilt(b1, a1, sample), signal.filtfilt(b2, a2, sample)
 
 
-def df_data_filter(df_data, n, cut_off):
+def df_data_filter(
+    df_data: pd.DataFrame,
+    n: int = 5,
+    cut_off: float = 0.15,
+    ) -> pd.DataFrame:
     highpass_data = {}
     for col in df_data.columns:
         lowpass, highpass = data_filter(
@@ -246,7 +291,9 @@ def df_data_filter(df_data, n, cut_off):
     return df_data, highpass_data
 
 
-def noise_statistics(noise):
+def noise_statistics(
+    noise: np.ndarray,
+    ) -> np.ndarray:
     if isinstance(noise, torch.Tensor):
         noise = noise.cpu().numpy()
     elif isinstance(noise, list):
@@ -258,7 +305,10 @@ def noise_statistics(noise):
     return noise_mean, noise_std
 
 
-def config_format(config, path):
+def config_format(
+    config: argparse.Namespace,
+    path: str = './',
+    ) -> ModelConfig:
     if hasattr(config, 'short_task_name'):
         config.task_name = config.short_task_name
         # config.pop('short_task_name')
@@ -268,7 +318,10 @@ def config_format(config, path):
     return ModelConfig(dict(vars(config))).to_yaml(path + 'config.yaml')
 
 
-def train_loss_plot(train_recorder, record_path):
+def train_loss_plot(
+    train_recorder: Dict[str, List[float]],
+    record_path: str = './',
+    ) -> None:
     _, ax = plt.subplots(1, 1, figsize=(8, 6))
     ax.plot(np.arange(len(train_recorder['train_loss'])),
             train_recorder['train_loss'], 'k-', label='train loss', lw=2.)
@@ -281,7 +334,11 @@ def train_loss_plot(train_recorder, record_path):
     plt.close()
 
 
-def turbine_curve_loader(wt, param, verbose=False):
+def turbine_curve_loader(
+    wt: int | str,
+    param: str,
+    verbose: bool = False,
+    ) -> Callable[[np.ndarray], np.ndarray]:
     wts = ['320', '265']; params = ['power', 'thrust', 'C_p', 'C_t']
     power_curve = pd.read_csv('datasets/WFP/Turbine_Power_Curve.csv', index_col=None, header=0)
     # print(power_curve.shape)
@@ -307,7 +364,10 @@ def turbine_curve_loader(wt, param, verbose=False):
 
 
 #  Check whether the shape and datetime columns of raw and hybrid data are matched
-def hybrid_data_check(raw, hybrid):
+def hybrid_data_check(
+    raw: pd.DataFrame,
+    hybrid: pd.DataFrame,
+    ) -> bool:
     if not (raw.shape[0] == hybrid.shape[0]):
         raise ValueError('Shape of raw and hybrid data not matched')
     if not (pd.to_datetime(raw['date']).equals(pd.to_datetime(hybrid['date']))):
@@ -315,7 +375,9 @@ def hybrid_data_check(raw, hybrid):
     return True
 
 
-def param_list_converter(param_list):
+def param_list_converter(
+    param_list: List[str | List[str]],
+    ) -> List[str | None]:
     assert isinstance(param_list, list), 'Input should be a list'
     for i, param in enumerate(param_list):
         if isinstance(param, (str, list)):
@@ -328,12 +390,16 @@ def param_list_converter(param_list):
     return param_list
 
 
-def speed_power_converter(pred_target, debug=False):
+def speed_power_converter(
+    pred_target: str | List[str],
+    debug: bool = False,
+    ) -> DotDict[str, Callable[[np.ndarray], np.ndarray] | None, Optional[Callable[[np.ndarray], np.ndarray]], float]:
     DEFAULT_POWER_BASELINE = 'datasets\WFP\Turbine_Patv_Spd_15min_filled.csv'
     DEFAULT_POWER_INDEX = ['320'] * 10 + ['265'] * 3
 
     pow_baseline = pd.read_csv(DEFAULT_POWER_BASELINE, index_col=None, header=0)
 
+    pred_target = [pred_target] if isinstance(pred_target, str) else pred_target
     if len(pred_target) == 1:
         pred_type, pred_idx = pred_target[0].split('_')
 
@@ -398,7 +464,9 @@ def speed_power_converter(pred_target, debug=False):
     return DotDict(flag=data_type, func=pow_func, baseline=baseline_data, capacity=pow_capacity)
 
 
-def finetune_config_generator(config_dict):
+def finetune_config_generator(
+    config_dict: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
     # Extracting hyperparameters that have multiple options
     variable_hyperparams = {k: v for k, v in config_dict.items() if isinstance(v, list)}
 
@@ -416,18 +484,25 @@ def finetune_config_generator(config_dict):
     return config_list
 
 
-def config_dict_update(raw_dict, update_dict):
+def config_dict_update(
+    raw_dict: Dict[str, Any],
+    update_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
     for key in raw_dict.keys() & update_dict.keys():
         raw_dict[key] = update_dict[key]
     return raw_dict
 
 
-def training_report_generator(config, setting, acc=None):
+def training_report_generator(
+    config: argparse.Namespace,
+    setting: str,
+    acc: Optional[float] = None,
+    ) -> None:
     DEFAULT_PARAMS = [
         'idx', 'acc', 'model_id', 'model', 'root_path', 'data_path', 'features', 'test_idx',
         'run_seed', 'seq_len', 'label_len', 'pred_len', 'enc_in', 'dec_in', 'c_out', 'd_model',
         'n_heads', 'e_layers', 'd_layers', 's_layers', 'd_ff', 'dropout', 'train_epochs',
-        'batch_size', 'patience', 'learning_rate', 'loss', 'lradj', 'run_seed', 'case_name',
+        'batch_size', 'patience', 'learning_rate', 'loss', 'lradj', 'case_name',
         ]
     DEFAULT_PATH = 'configs/batch_report.csv'
 
@@ -435,7 +510,7 @@ def training_report_generator(config, setting, acc=None):
         pd.DataFrame(columns=DEFAULT_PARAMS).to_csv(DEFAULT_PATH, index=False)
     report_df = pd.read_csv(DEFAULT_PATH, index_col=0)
 
-    print(f'Training report generating ... ({setting})')
+    print(f'Training report generating ....')
     report_dict = config_dict_update({key: None for key in DEFAULT_PARAMS}, vars(config))
     report_dict.update({'idx': str(len(report_df) + 1)})
     report_dict.update({'case_name': setting})
