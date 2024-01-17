@@ -33,8 +33,9 @@ def model_runner(
         args = config
 
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
-    args.use_filter = DotDict(args.use_filter)
     args.use_hybrid = DotDict(args.use_hybrid)
+    args.use_calibrate = DotDict(args.use_calibrate)
+    args.use_filter = DotDict(args.use_filter)
 
     fix_seed = 2024
     if seed is not None:
@@ -52,8 +53,9 @@ def model_runner(
 
     # check the target, subcol and use_hybrid target input
     # convert all of them to list
-    args.target, args.subcol, args.use_hybrid.target = \
-        param_list_converter([args.target, args.subcol, args.use_hybrid.target])
+    args.target, args.subcol, args.use_hybrid.target, args.use_calibrate.target = \
+        param_list_converter(
+            [args.target, args.subcol, args.use_hybrid.target, args.use_calibrate.target])
 
     # check whether the input dimension of encoder and decoder are matched or not
     subcol_len = len(args.subcol) if args.subcol is not None else len([])
@@ -63,8 +65,12 @@ def model_runner(
         args.enc_in, args.dec_in, args.c_out = \
             len(args.target) + subcol_len, len(args.target) + subcol_len, len(args.target)
     elif args.features == 'MS':
-        args.enc_in, args.dec_in, args.c_out = \
-            len(args.target) + subcol_len, len(args.target) + subcol_len, 1
+        if args.use_calibrate.flag:
+            args.enc_in, args.dec_in, args.c_out = \
+                len(args.use_calibrate.target) + subcol_len, len(args.use_calibrate.target) + subcol_len, 1
+        else:
+            args.enc_in, args.dec_in, args.c_out = \
+                len(args.target) + subcol_len, len(args.target) + subcol_len, 1
     else:
         raise ValueError('Illegal input feature type!')
 
@@ -290,9 +296,14 @@ if __name__ == '__main__':
     # config = 'configs/multiple_power_config.yaml'
     config = 'configs/multiple_speed_config.yaml'
 
+    calibrate_config = 'configs/speed_calibrate_config.yaml'
+
     hyper_config = 'configs/hyper_config.yaml'
 
     model_runner(config, report=True)
+
+    # calibation training and testing
+    # model_runner(calibrate_config, report=False)
 
     # model_runner_for_models(config, report=True)
 

@@ -85,8 +85,9 @@ def data_provider(args, flag):
             freq=freq,
             seasonal_patterns=args.seasonal_patterns,
             test_idx=args.test_idx,
-            filters=args.use_filter,
             hybrid=args.use_hybrid,
+            calibrate=args.use_calibrate,
+            filters=args.use_filter,
         )
         print(flag, len(data_set))
         data_loader = DataLoader(

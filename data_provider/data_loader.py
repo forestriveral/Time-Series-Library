@@ -295,7 +295,7 @@ class Dataset_Custom(Dataset):
 
 class Dataset_Turbine(Dataset):
     def __init__(self, root_path, flag='train', size=None, test_idx=0, subcol=None,
-                 features='S', data_path='ETTh1.csv', filters=None, hybrid=None,
+                 features='S', data_path='ETTh1.csv', hybrid=None, calibrate=None, filters=None,
                  target='OT', scale=True, timeenc=0, freq='h', seasonal_patterns=None):
         # size [seq_len, label_len, pred_len]
         # info
@@ -322,10 +322,12 @@ class Dataset_Turbine(Dataset):
         self.split_num = None
         self.time_stamp = None
         self.test_stamp = []
-        self.filters = DotDict(filters)
-        self.highpass_data = None
         self.hybrid = DotDict(hybrid)
         self.hybrid_data = None
+        self.calibrate = DotDict(calibrate)
+        self.cali_data = None
+        self.filters = DotDict(filters)
+        self.highpass_data = None
 
         self.root_path = root_path
         self.data_path = data_path
@@ -348,7 +350,7 @@ class Dataset_Turbine(Dataset):
         if isinstance(self.target, str):
             self.target = [self.target]
         if not set(self.target).issubset(set(cols)):
-            raise ValueError('Target should be in columns')
+            raise ValueError('Target should be in columns of Training dataset')
 
         # cols.remove(self.target)
         cols = list(filter(lambda x: x not in self.target, cols))
@@ -359,15 +361,19 @@ class Dataset_Turbine(Dataset):
             df_hybrid = pd.read_csv(
                 os.path.join(self.hybrid.root_path, self.hybrid.data_path))
             hybrid_data_check(df_raw, df_hybrid)
-            assert isinstance(self.hybrid.target, (list, str)), \
-                'Hybrid target should be list or str'
-            if isinstance(self.hybrid.target, str):
-                self.hybrid.target = [self.hybrid.target]
-            hybrid_cols = [f'{t}_hybrid' for t in self.hybrid.target]
-            df_hybrid.rename(columns=dict(zip(self.hybrid.target, hybrid_cols)), inplace=True)
+            assert set(self.hybrid.target).issubset(set(df_hybrid.columns)), \
+                'Hybrid target should be in columns of Hybrid dataset'
             assert len(self.target) == len(self.hybrid.target), \
                 'Hybrid dataset should have the same number of features with raw dataset'
-            df_hybrid = df_hybrid[hybrid_cols]
+            df_hybrid = df_hybrid[self.hybrid.target]
+
+        if self.calibrate.flag:
+            df_cali = pd.read_csv(
+                os.path.join(self.calibrate.root_path, self.calibrate.data_path))
+            hybrid_data_check(df_raw, df_cali)
+            assert set(self.calibrate.target).issubset(set(df_cali.columns)), \
+                'Calibrate target should be in columns of Calibrate dataset'
+            df_cali = df_cali[self.calibrate.target]
 
         if self.test_idx == 0:
             num_train = int(len(df_raw) * 0.7)
@@ -405,10 +411,14 @@ class Dataset_Turbine(Dataset):
             data = self.scaler.transform(df_data.values)
             if self.hybrid.flag:
                 hybrid = self.scaler.transform(df_hybrid.values)
+            if self.calibrate.flag:
+                calibrate = self.scaler.transform(df_cali.values)
         else:
             data = df_data.values
             if self.hybrid.flag:
                 hybrid = df_hybrid.values
+            if self.calibrate.flag:
+                calibrate = df_cali.values
 
         # df_stamp = df_raw[['date']][border1:border2]
         df_stamp = dataset_reader(df_raw[['date']], border1, border2)
@@ -427,6 +437,8 @@ class Dataset_Turbine(Dataset):
 
         if self.hybrid.flag:
             self.hybrid_data = dataset_reader(hybrid, border1, border2)
+        if self.calibrate.flag:
+            self.cali_data = dataset_reader(calibrate, border1, border2)
         self.data_x = dataset_reader(data, border1, border2)
         self.data_y = dataset_reader(data, border1, border2)
         self.data_stamp = data_stamp
@@ -446,13 +458,22 @@ class Dataset_Turbine(Dataset):
         else:
             data_y_hybrid = self.data_y[r_begin:r_end]
 
+        if self.calibrate.flag and self.cali_data is not None:
+            data_x_calibrate = self.cali_data[s_begin:s_end]
+            data_y_hybrid = np.concatenate(
+                [self.cali_data[s_end - self.label_len:s_end],
+                 self.data_y[s_end:r_end]],
+                axis=0)
+        else:
+            data_x_calibrate = self.data_x[s_begin:s_end]
+
         if self.filters.flag and self.filters.type == 1:
             self.highpass_data = []
-            seq_x, seq_x_high_frq = data_filter(self.data_x[s_begin:s_end], self.filters.order, self.filters.cutoff)
+            seq_x, seq_x_high_frq = data_filter(data_x_calibrate, self.filters.order, self.filters.cutoff)
             seq_y, _ = data_filter(data_y_hybrid, self.filters.order, self.filters.cutoff)
             self.highpass_data.append(seq_x_high_frq)
         else:
-            seq_x = self.data_x[s_begin:s_end]
+            seq_x = data_x_calibrate
             seq_y = data_y_hybrid
 
         seq_x_mark = self.data_stamp[s_begin:s_end]

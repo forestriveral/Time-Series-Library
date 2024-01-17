@@ -358,7 +358,7 @@ def turbine_curve_loader(
         fill_value='extrapolate')
 
     if verbose:
-        print(f'Turbine {wt} {param} curve loading ...')
+        print(f'(Turbine {wt} {param} curve loading ....)')
 
     return interp_func
 
@@ -392,76 +392,74 @@ def param_list_converter(
 
 def speed_power_converter(
     pred_target: str | List[str],
-    debug: bool = False,
-    ) -> DotDict[str, Callable[[np.ndarray], np.ndarray] | None, Optional[Callable[[np.ndarray], np.ndarray]], float]:
+    data_type: str = 'power',
+    ) -> DotDict:
+
+    assert data_type in ['power', 'speed'], 'Invalid data type'
     DEFAULT_POWER_BASELINE = 'datasets\WFP\Turbine_Patv_Spd_15min_filled.csv'
     DEFAULT_POWER_INDEX = ['320'] * 10 + ['265'] * 3
 
     pow_baseline = pd.read_csv(DEFAULT_POWER_BASELINE, index_col=None, header=0)
 
+    def baseline_data(date, data):
+        assert isinstance(date, np.ndarray), 'Input date should be a numpy array'
+        data['date'] = pd.to_datetime(data['date'])
+        data = data.set_index('date')
+        data = data.loc[pd.to_datetime(date.flatten())]
+        data = data.reset_index()
+        print('(Baseline data extracting ....)')
+        return data.iloc[:, 1:].values
+
     pred_target = [pred_target] if isinstance(pred_target, str) else pred_target
     if len(pred_target) == 1:
         pred_type, pred_idx = pred_target[0].split('_')
-
-        data_type = 'power'
-        pow_func = lambda x: x
-        baseline_data = None
-        pow_capacity = 39.95
-
-        if (not debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
+        if (data_type == 'power') and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
             pow_func = turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power', verbose=True)
-            pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
-            pow_baseline = pow_baseline[['date', f'Patv_{pred_idx}']]
-
-            def baseline_data(date, data=pow_baseline):
-                assert isinstance(date, np.ndarray), 'Input date should be a numpy array'
-                # load the baseline data and extract the power baseline of the specific date range
-                data['date'] = pd.to_datetime(data['date'])
-                data = data.set_index('date')
-                data = data.loc[pd.to_datetime(date.flatten())]
-                data = data.reset_index()
-                print('Baseline data extracting ...')
-                return data.iloc[:, 1].values.reshape(date.shape)
-
-        elif (debug) and (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
-            pow_capacity = 20.
-            data_type = 'speed'
-        elif (pred_type == 'Patv') and (pred_idx in [str(i) for i in range(1, 14)]):
-            pow_capacity = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
-        elif (pred_type == 'Patv') and (pred_idx == 'Total'):
-            pow_capacity = 39.95
+            pow_data = lambda date, y: baseline_data(date, pow_baseline[['date', f'Patv_{pred_idx}']]).reshape(date.shape)
+            data_limit = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
+        elif (data_type == 'power') and (pred_type == 'Patv') and (pred_idx in [str(i) for i in range(1, 14)]):
+            pow_func = lambda x: x
+            pow_data = lambda x, y: y
+            data_limit = float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.
+        elif (data_type == 'speed') and (pred_type == 'Patv'):
+            data_type = None
+            pow_func = lambda x: x
+            pow_data = lambda x, y: y
+            data_limit = 39.95
+        else:
+            pow_func = lambda x: x
+            pow_data = lambda x, y: y
+            data_limit = 20.
     else:
-        data_type = 'power'
-        if debug:
-            data_type = 'speed'
+        if (data_type == 'power'):
+            pow_funcs, pow_cols, pow_lims = [], [], []
+            for pred in pred_target:
+                pred_type, pred_idx = pred.split('_')
+                if (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
+                    pow_funcs.append(turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power', verbose=False))
+                else:
+                    pow_funcs.append(lambda x: x)
+                pow_lims.append(float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.)
+                pow_cols.append(f'Patv_{pred_idx}')
 
-        pow_funcs, pow_cols, pow_caps = [], [], []
-        for pred in pred_target:
-            pred_type, pred_idx = pred.split('_')
-            if (pred_type == 'Wspd') and (pred_idx in [str(i) for i in range(1, 14)]):
-                pow_funcs.append(turbine_curve_loader(DEFAULT_POWER_INDEX[int(pred_idx) - 1], 'power', verbose=False))
-            else:
-                pow_funcs.append(lambda x: x)
-            pow_caps.append(float(DEFAULT_POWER_INDEX[int(pred_idx) - 1]) / 100.)
-            pow_cols.append(f'Patv_{pred_idx}')
+            pow_func = lambda x: np.sum(
+                [pow_funcs[i](x.transpose(2, 0, 1).reshape(len(pow_funcs), -1)[i]) for i in range(len(pow_funcs))],
+                axis=0).reshape(x.shape[0], x.shape[1])
+            pow_data = lambda date, y: baseline_data(date, pow_baseline[['date'] + pow_cols]).reshape(date.shape[0], date.shape[1], -1).sum(axis=2)
+            data_limit = np.sum(pow_lims)
+        else:
+            for pred in pred_target:
+                pred_type, pred_idx = pred.split('_')
+                if (pred_type == 'Patv'):
+                    data_type = None
+                    break
+                else:
+                    continue
+            pow_func = lambda x: x
+            pow_data = lambda x, y: y
+            data_limit = 20.
 
-        pow_func = lambda x: np.sum(
-            [pow_funcs[i](x.transpose(2, 0, 1).reshape(len(pow_funcs), -1)[i]) for i in range(len(pow_funcs))],
-            axis=0).reshape(x.shape[0], x.shape[1])
-        pow_capacity = np.sum(pow_caps)
-        pow_baseline = pow_baseline[['date'] + pow_cols]
-
-        def baseline_data(date, data=pow_baseline):
-            assert isinstance(date, np.ndarray), 'Input date should be a numpy array'
-            # load the baseline data and extract the power baseline of the specific date range
-            data['date'] = pd.to_datetime(data['date'])
-            data = data.set_index('date')
-            data = data.loc[pd.to_datetime(date.flatten())]
-            data = data.reset_index()
-            print('Baseline data extracting ...')
-            return data.iloc[:, 1:].values.reshape(date.shape[0], date.shape[1], -1).sum(axis=2)
-
-    return DotDict(flag=data_type, func=pow_func, baseline=baseline_data, capacity=pow_capacity)
+    return DotDict(type=data_type, func=pow_func, baseline=pow_data, limit=data_limit)
 
 
 def finetune_config_generator(

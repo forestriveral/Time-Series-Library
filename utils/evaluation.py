@@ -22,7 +22,7 @@ except:
 def pred_true_load(
     case_path: str,
     ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    print('Loading prediction and true data ....')
+    print('(Loading prediction and true data ....)')
 
     if os.path.exists(case_path + '/test.npy'):
         test_data = np.load(case_path + '/test.npy', allow_pickle=True)
@@ -69,36 +69,43 @@ def slide_pred_plot(
 
     if convert is not None:
         pred = convert.func(pred)
-        if convert.baseline is not None:
-            true = convert.baseline(time)
+        true = convert.baseline(time, true)
 
-    capacity = convert.capacity
+    limit = convert.limit
 
-    if convert.flag == 'power':
+    if convert.type == 'power':
         ylabel = 'Power (MW)'
-    else:
+    elif convert.type == 'speed':
         ylabel = 'Wind Speed (m/s)'
+        limit = max(pred.max(), true.max())
+
+        # set the default data index to be plot
+        plot_default = 0
+        if (pred.shape[-1] > 1) and (true.shape[-1] > 1):
+            pred = pred[:, :, plot_default]
+            true = true[:, :, plot_default]
+    else:
+        print('Prediction Ploting ignored ....')
+        return None
+
+    print(f'{convert.type.capitalize()} prediction ploting ....')
 
     if case is not None:
         case_name = case.split('/')[-1]
         title_label = f'Prediction Plot of {case_name}'
-    else:
-        title_label = 'Prediction Plot'
-
-    if case is not None:
         slide_num = 30
         if pred.shape[0] <= slide_num:
             slide_num = pred.shape[0]
     else:
+        title_label = 'Prediction Plot'
         slide_num = pred.shape[0]
 
     subplot_num = 4
     slide_num_subplot = slide_num // subplot_num + 1
     point_num = int(slide_num * slide_step)
-    print('Slide prediction ploting ....')
     print('\tSubplots: ', subplot_num)
     print('\tPredictions: ', slide_num)
-    print('\tDatasamples: ', point_num)
+    print('\tDatasamples: ', point_num, '\n')
 
     if times is not None:
         time = time[:slide_num]
@@ -121,7 +128,7 @@ def slide_pred_plot(
         time_scope = pd.date_range(time_stamp.min(), time_end, freq='15T').values
         for split_line in np.arange(0, min(slide_num_subplot, end - start) + 1):
             axi.axvline(time_scope[split_line * slide_step], color='r', linestyle='--', lw=1.2)
-        axi.axhline(capacity, color='k', linestyle='--', lw=0.8)
+        axi.axhline(limit, color='k', linestyle='--', lw=0.8)
         if ii == subplot_num - 1:
             axi.set_xlabel('Time', fontsize=15)
         for xtick in axi.get_xticklabels():
@@ -131,7 +138,7 @@ def slide_pred_plot(
         axi.xaxis.set_major_locator(mdates.HourLocator(interval=12))
         axi.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d | %H:%M"))
         axi.set_ylabel(ylabel, fontsize=15)
-        axi.set_ylim([0., 1.2 * capacity])
+        axi.set_ylim([0., 1.2 * limit])
         axi.tick_params(labelsize=15, colors='k', direction='in',
                         top=True, bottom=True, left=True, right=True)
         tick_labs = axi.get_xticklabels() + axi.get_yticklabels()
@@ -141,7 +148,7 @@ def slide_pred_plot(
     # plt.tight_layout()
     plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.1, wspace=0.15, hspace=0.25)
     if save:
-        plt.savefig(save, format='png', dpi=200, bbox_inches='tight')
+        plt.savefig(save + f'/{convert.type}_plot.png', format='png', dpi=200, bbox_inches='tight')
     else:
         plt.show()
     plt.close()
@@ -179,30 +186,31 @@ def slide_pred_accuracy(
 
     if convert is not None:
         pred = convert.func(pred)
-        if convert.baseline is not None:
-            true = convert.baseline(time)
+        true = convert.baseline(time, true)
 
-    capacity = convert.capacity
+    limit = convert.limit
+
+    if convert.type != 'power':
+        print('Prediction Accuracy calculation ignored ....')
+        return None
+
     acc_max = 100.
     acc_require = 85.
 
     if case is not None:
         case_name = case.split('/')[-1]
         title_label = f'Prediction Precision with {case_name}'
-    else:
-        title_label = 'Prediction Precision'
-
-    if case is not None:
         slide_num = 30
         if pred.shape[0] <= slide_num:
             slide_num = pred.shape[0]
     else:
+        title_label = 'Prediction Precision'
         slide_num = pred.shape[0]
 
     pred = pred[:slide_num]
     true = true[:slide_num]
 
-    print(f'Prediction Accuracy calculating ({metric}) ....')
+    print(f'Prediction Accuracy calculating [{metric}] ....')
     time_start = pd.to_datetime(time[0, 0]).strftime('%Y-%m-%d %H:%M:%S')
     time_end = pd.to_datetime(time[-1, -1]).strftime('%Y-%m-%d %H:%M:%S')
     print(f'\tTime Range: {time_start} to {time_end}')
@@ -221,9 +229,9 @@ def slide_pred_accuracy(
 
     precisions = []; powers = []
     for i in range(pred.shape[0]):
-        precisions.append(metric_dict[metric](pred[i], true[i], capacity))
+        precisions.append(metric_dict[metric](pred[i], true[i], limit))
         if metric == 'Acc_day_ahead':
-            powers.append(Acc_hour_ahead_power(pred[i], true[i], capacity, capacity))
+            powers.append(Acc_hour_ahead_power(pred[i], true[i], limit, limit))
     precisions = np.array(precisions)
     if metric == 'Acc_day_ahead':
         powers = np.where(precisions >= acc_require, 0., np.array(powers))
@@ -267,7 +275,7 @@ def slide_pred_accuracy(
     [tick_lab.set_fontname('Times New Roman') for tick_lab in tick_labs]
     ax.legend(loc="best", fontsize=15)
     if save:
-        plt.savefig(save, format='png', dpi=200, bbox_inches='tight')
+        plt.savefig(save + f'/{convert.type}_acc.png', format='png', dpi=200, bbox_inches='tight')
     else:
         plt.show()
     plt.close()

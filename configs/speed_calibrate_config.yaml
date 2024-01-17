@@ -3,34 +3,34 @@
 # basic config
 task_name: LTF
 is_training: 1
-model_id: Patv_cfd_wrf
+model_id: Wspd6_wrf_calibrate
 model: Informer
 
 # data loader
 data: turbine
 root_path: ./datasets/WFP/
 data_path: Turbine_Patv_Spd_15min_filled.csv
-res_path: ./results/
+res_path: ./results/calibration/
 features: S
 target:
-  - Patv_Total
+  - Wspd_6
 subcol: []
 freq: t
-checkpoints: ./checkpoints/
-test_idx: 5
+checkpoints: ./checkpoints/calibration/
+test_idx: 1
 run_seed: 2024
 
 # hybrid training
 use_hybrid:
-  flag: true
+  flag: false
   root_path: ./datasets/CFD/
   data_path: wrf_converted_turbine_data.csv
   target:
-    - Patv_Total
+    - Wspd_6
 
 # calibration setting
 use_calibrate:
-  flag: false
+  flag: true
   root_path: ./datasets/WRF/
   data_path: extracted_wrf_data.csv
   target:
@@ -41,10 +41,10 @@ use_filter:
   flag: false
   type: 0
   order: 5
-  cutoff: 0.15
+  cutoff: 0.1
 
 # forecasting task
-seq_len: 256
+seq_len: 96
 label_len: 96
 pred_len: 96
 seasonal_patterns: Monthly
@@ -62,13 +62,13 @@ num_kernels: 6
 enc_in: 1
 dec_in: 1
 c_out: 1
-d_model: 64
-n_heads: 16
+d_model: 32
+n_heads: 4
 e_layers: 2
 d_layers: 1
-d_ff: 512
+d_ff: 64
 moving_avg: 25
-factor: 3
+factor: 1
 distil: true
 dropout: 0.15
 embed: timeF

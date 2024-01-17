@@ -28,25 +28,38 @@ def print_args(args):
     print(f'  {"Run Seed:":<20}{args.run_seed:<20}')
     print()
 
+    if args.use_hybrid.flag:
+            print("\033[1m" + "Use Hybrid" + "\033[0m")
+            print(f'  {"Flag:":<20}{args.use_hybrid.flag:<20}')
+            print(f'  {"Root Path:":<20}{args.use_hybrid.root_path:<20}')
+            print(f'  {"Data Path:":<20}{args.use_hybrid.data_path:<20}')
+
+            if args.use_hybrid.target is not None:
+                print_hybrid_target = ' '.join(args.use_hybrid.target)
+            else:
+                print_hybrid_target = '(None)'
+            print(f'  {"Target:":<20}{print_hybrid_target:<20}')
+            print()
+
+    if args.use_calibrate.flag:
+            print("\033[1m" + "Use Calibration" + "\033[0m")
+            print(f'  {"Flag:":<20}{args.use_calibrate.flag:<20}')
+            print(f'  {"Root Path:":<20}{args.use_calibrate.root_path:<20}')
+            print(f'  {"Data Path:":<20}{args.use_calibrate.data_path:<20}')
+
+            if args.use_calibrate.target is not None:
+                print_calibrate_target = ' '.join(args.use_calibrate.target)
+            else:
+                print_calibrate_target = '(None)'
+            print(f'  {"Target:":<20}{print_calibrate_target:<20}')
+            print()
+
     if args.use_filter.flag:
         print("\033[1m" + "Use Filter" + "\033[0m")
         print(f'  {"Flag:":<20}{args.use_filter.flag:<20}')
         print(f'  {"Type:":<20}{args.use_filter.type:<20}')
         print(f'  {"Order:":<20}{args.use_filter.order:<20}')
         print(f'  {"Cutoff:":<20}{args.use_filter.cutoff:<20}')
-        print()
-
-    if args.use_hybrid.flag:
-        print("\033[1m" + "Use Hybrid" + "\033[0m")
-        print(f'  {"Flag:":<20}{args.use_hybrid.flag:<20}')
-        print(f'  {"Root Path:":<20}{args.use_hybrid.root_path:<20}')
-        print(f'  {"Data Path:":<20}{args.use_hybrid.data_path:<20}')
-
-        if args.use_hybrid.target is not None:
-            print_hybrid_target = ' '.join(args.use_hybrid.target)
-        else:
-            print_hybrid_target = '(None)'
-        print(f'  {"Target:":<20}{print_hybrid_target:<20}')
         print()
 
     if args.task_name in ['long_term_forecast', 'short_term_forecast']:

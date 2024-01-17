@@ -220,7 +220,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         test_data, test_loader = self._get_data(flag='test')
         if test:
             print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            self.model.load_state_dict(
+                torch.load(os.path.join(self.args.checkpoints + setting, 'checkpoint.pth')))
 
         preds = []
         trues = []
@@ -331,21 +332,28 @@ class Exp_Long_Term_Forecast(Exp_Basic):
     def eval(self, setting, report=False):
         folder_path = self.args.res_path + setting
         if not os.path.exists(folder_path):
-            raise ValueError('No such a folder: {}'.format(folder_path))
+            raise ValueError('No such a case folder: {}'.format(folder_path))
 
         # check the prediction target is speed or power
-        convert = speed_power_converter(self.args.target, debug=False)
+        pow_convert = speed_power_converter(self.args.target, 'power')
+        spd_convert = speed_power_converter(self.args.target, 'speed')
 
         _ = slide_pred_plot(
             folder_path,
-            convert=convert,
-            save=folder_path + '/pred_plot.png',
+            convert=pow_convert,
+            save=folder_path,
+            )
+
+        _ = slide_pred_plot(
+            folder_path,
+            convert=spd_convert,
+            save=folder_path,
             )
 
         acc = slide_pred_accuracy(
             folder_path,
-            convert=convert,
-            save=folder_path + '/pred_acc.png',
+            convert=pow_convert,
+            save=folder_path,
             )
 
         if report:
