@@ -292,9 +292,9 @@ def model_runner_for_finetuning(
 
 if __name__ == '__main__':
     # config = 'configs/power_config.yaml'
-    # config = 'configs/speed_config.yaml'
+    config = 'configs/speed_config.yaml'
     # config = 'configs/multiple_power_config.yaml'
-    config = 'configs/multiple_speed_config.yaml'
+    # config = 'configs/multiple_speed_config.yaml'
 
     calibrate_config = 'configs/speed_calibrate_config.yaml'
 

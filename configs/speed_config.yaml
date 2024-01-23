@@ -2,7 +2,7 @@
 
 # basic config
 task_name: LTF
-is_training: 0
+is_training: 1
 model_id: Wspd6_cfd_wts
 model: iTransformer
 
